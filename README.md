@@ -7,7 +7,9 @@
    Download the generated TARGET_pesto.pdb to `2.HADDOCK3` folder
    
 2. HADDOCK3
+   
    Modify the filename in each script.
+   
    Usage:
    ```
    python 0.fetch_active_res.py TARGET_pesto.pdb
@@ -30,6 +32,7 @@
    Move all the `.cif` files to `3.Boltz2` folder.
    
 3. Boltz2-templated co-folding
+   
    Modify the filename in `1.run_batch_clusters.py`.
    ```
    python 1.run_batch_clusters.py  # Main boltz2 script
