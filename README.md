@@ -1,5 +1,13 @@
 # GluePlex
 
+Prerequisites: 
+```
+which haddock3
+which chimerax
+which boltz
+```
+
+
 ## Stepwise
 1. PeSTO (TODO)
    
