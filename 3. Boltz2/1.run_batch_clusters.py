@@ -54,9 +54,6 @@ sequences:
       id: B  # {protein_b_name}
       sequence: {protein_b_seq}
       msa: empty
-      modifications:
-          - position: 160   # index of residue, starting from 1
-            ccd: TPO            # CCD code of the modified residue
   - ligand:
       id: C
       smiles: '{ligand_smiles}'
