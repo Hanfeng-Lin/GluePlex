@@ -6,7 +6,7 @@ GluePlex is an automated pipeline for molecular glue docking and analysis, integ
 
 The pipeline consists of three main steps:
 1.  **Step 1: PeSTo**: Predicts active residues and interfaces on the target protein.
-2.  **Step 2: HADDOCK3**: Performs data-driven docking using the predicted interfaces to generate initial models.
+2.  **Step 2: HADDOCK3**: Performs physics-based docking using the predicted interfaces to generate initial models.
 3.  **Step 3: Boltz**: Refines the HADDOCK3 models and scores them using AlphaFold3-like confidence metrics (ipTM), followed by clustering and visualization.
 
 ## Prerequisites
@@ -150,10 +150,13 @@ Result_VAV1_CRBN/
 
 ## Analysis
 
-The final step generates UMAP plots in png format and interactive plots (`.html` files) in the `step3_boltz` directory. These plots visualize the conformational space of the docked models, colored by their confidence scores (ipTM).
+The final step generates UMAP plots in `.png` format and interactive plots (`.html` files) in the `step3_boltz` directory. These plots visualize the conformational space of the docked models, colored by their confidence scores (ipTM).
+
 
 UMAP_cluster colors by cluster id from HADDOCK3.
+
 UMAP_chainpair_ipTM colors by the average ipTM score between chain 0 (e.g. CRBN) and chain 1 (target protein, e.g. VAV1).
+
 UMAP_ipTM colors by the overall ipTM score of the model.
 
 To view the plots on a remote server, you can start a simple HTTP server:
