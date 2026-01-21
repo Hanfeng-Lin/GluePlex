@@ -23,7 +23,7 @@ The pipeline relies on three specific Conda environments being available on your
 
 1.  **Clone the repository**:
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/Hanfeng-Lin/GluePlex
     cd GluePlex
     ```
 
