@@ -131,7 +131,7 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     if not active_res:
         print("Fetching active residues using 2.0.fetch_active_res.py...")
         # Run in pesto env
-        cmd = ["conda", "run", "-n", "pesto", "python", "2.0.fetch_active_res.py", target_pesto_pdb]
+        cmd = ["conda", "run", "-n", "pesto", "python", "workflow_scripts/2.0.fetch_active_res.py", target_pesto_pdb]
         
         # We need to capture output for this specific command to get the residues
         # run_command doesn't return output, so we use subprocess directly here
@@ -176,7 +176,7 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     
     # Script path needs to be absolute or relative to step2_dir
     # Assuming run_glueplex.py is in base_dir
-    script_path = os.path.abspath("2.1.generate_actpass.py")
+    script_path = os.path.abspath("workflow_scripts/2.1.generate_actpass.py")
     
     cmd = ["python", script_path, 
            "--target_pdb", abs_target_pesto_pdb, 
@@ -196,7 +196,7 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     run_dir = os.path.join(step2_dir, os.path.basename(run_dir_name))
     
     ncores = config.get('haddock_ncores', 48)
-    script_path_22 = os.path.abspath("2.2.run_haddock_workflow.py")
+    script_path_22 = os.path.abspath("workflow_scripts/2.2.run_haddock_workflow.py")
     
     cmd = ["python", script_path_22,
            "--target_pdb", abs_target_pesto_pdb,
@@ -208,7 +208,7 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     
     # 2.3 Export mmCIF
     print("Exporting results to mmCIF...")
-    script_path_23 = os.path.abspath("2.3.export_mmcif.py")
+    script_path_23 = os.path.abspath("workflow_scripts/2.3.export_mmcif.py")
     cmd = ["python", script_path_23, "--run_dir", run_dir]
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file) 
     
@@ -243,7 +243,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
     
     print(f"Running Boltz batch processing from {input_dir}...")
     
-    script_path_31 = os.path.abspath("3.1.run_batch_clusters.py")
+    script_path_31 = os.path.abspath("workflow_scripts/3.1.run_batch_clusters.py")
     abs_config_path = os.path.abspath(config_path)
     
     cmd = ["python", script_path_31,
@@ -272,7 +272,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
     
     print(f"Final results will be saved to: {final_results_dir}")
     
-    script_path_32 = os.path.abspath("3.2.post_analysis.py")
+    script_path_32 = os.path.abspath("workflow_scripts/3.2.post_analysis.py")
     
     cmd = ["python", script_path_32,
            "--source_dir", output_dir,
