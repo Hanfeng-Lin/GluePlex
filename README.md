@@ -17,7 +17,8 @@ The pipeline relies on three specific Conda environments being available on your
 2.  **`haddock3`**: Environment containing the HADDOCK3 executable.
 3.  **`boltz_analysis`**: Environment containing Boltz and analysis tools (Gemmi, UMAP, etc.).
 
-*Note: The orchestrator (`run_glueplex.py`) explicitly calls `conda run -n [env_name]`. Ensure your environments match these names or update the script/config accordingly.*
+You also need to download and install UCSF Chimera X for mmCIF conversion.
+https://www.cgl.ucsf.edu/chimerax/download.html
 
 ## Installation
 
