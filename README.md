@@ -27,7 +27,17 @@ The pipeline relies on three specific Conda environments being available on your
     cd GluePlex
     ```
 
-2.  **Create the required Conda environments**:
+2.  **Set up PeSTo**:
+    Since PeSTo cannot be distributed directly, you need to clone it into the `tools` directory:
+    ```bash
+    cd tools
+    git clone https://github.com/LBM-EPFL/PeSTo.git
+    # Move the provided apply_model.py to the PeSTo directory (if needed/customized)
+    cp apply_model.py PeSTo/
+    cd ..
+    ```
+
+3.  **Create the required Conda environments**:
     
     **Step 1: PeSTo**
     ```bash
