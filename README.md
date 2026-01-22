@@ -6,7 +6,7 @@ GluePlex is an automated pipeline for molecular glue docking and analysis, integ
 
 The pipeline consists of three main steps:
 1.  **Step 1: PeSTo**: Predicts active residues and interfaces on the target protein.
-2.  **Step 2: HADDOCK3**: Performs physics-based docking using the predicted interfaces to generate initial models.
+2.  **Step 2: HADDOCK3**: Performs data-driven docking using the predicted interfaces to generate initial models.
 3.  **Step 3: Boltz**: Refines the HADDOCK3 models and scores them using AlphaFold3-like confidence metrics (ipTM), followed by clustering and visualization.
 
 ## Prerequisites
@@ -17,18 +17,26 @@ The pipeline relies on three specific Conda environments being available on your
 2.  **`haddock3`**: Environment containing the HADDOCK3 executable.
 3.  **`boltz_analysis`**: Environment containing Boltz and analysis tools (Gemmi, UMAP, etc.).
 
-You also need to download and install UCSF Chimera X for mmCIF conversion.
-https://www.cgl.ucsf.edu/chimerax/download.html
+*Note: The orchestrator (`run_glueplex.py`) explicitly calls `conda run -n [env_name]`. Ensure your environments match these names or update the script/config accordingly.*
 
 ## Installation
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/Hanfeng-Lin/GluePlex
+    git clone <repository_url>
     cd GluePlex
     ```
 
-2.  **Set up PeSTo**:
+2.  **Install NACCESS and Chimera X**:
+    Ensure `naccess` is installed and available in your PATH. This is required for calculating surface accessibility in Step 2.
+    Chimera X is required for converting PDB to mmCIF in Step 2.
+
+    ```bash
+    which naccess
+    which chimerax
+    ```
+    https://www.cgl.ucsf.edu/chimerax/download.html
+3.  **Set up PeSTo**:
     Since PeSTo cannot be distributed directly, you need to clone it into the `tools` directory:
     ```bash
     cd tools
@@ -48,11 +56,6 @@ https://www.cgl.ucsf.edu/chimerax/download.html
     **Step 2: HADDOCK3**
     ```bash
     conda env create -f env_haddock3.yml
-    ```
-    *Note: You also need `chimerax` in your PATH for mmCIF conversion.*
-
-    ```bash
-    which chimerax
     ```
 
     **Step 3: Boltz Analysis**
@@ -80,8 +83,8 @@ target_pdb: "./VAV1_af2.pdb"  # Path to target PDB or PDB ID (auto parsing e.g.,
 
 # Step 2: HADDOCK3
 # Active residues for Target (Partner 1). 
-# If empty, they will be fetched automatically (TODO: SASA filtering).
-target_active_res: "1,3,9,10,..." 
+# If empty, they will be fetched automatically through PeSTO score and SASA filtering.
+# target_active_res: "1,3,9,10,..." 
 haddock_run_dir: "haddock_results"
 haddock_ncores: 80
 
@@ -151,13 +154,10 @@ Result_VAV1_CRBN/
 
 ## Analysis
 
-The final step generates UMAP plots in `.png` format and interactive plots (`.html` files) in the `step3_boltz` directory. These plots visualize the conformational space of the docked models, colored by their confidence scores (ipTM).
-
+The final step generates UMAP plots in png format and interactive plots (`.html` files) in the `step3_boltz` directory. These plots visualize the conformational space of the docked models, colored by their confidence scores (ipTM).
 
 UMAP_cluster colors by cluster id from HADDOCK3.
-
 UMAP_chainpair_ipTM colors by the average ipTM score between chain 0 (e.g. CRBN) and chain 1 (target protein, e.g. VAV1).
-
 UMAP_ipTM colors by the overall ipTM score of the model.
 
 To view the plots on a remote server, you can start a simple HTTP server:
