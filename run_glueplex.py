@@ -280,7 +280,8 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--align_chain", "A",
            "--extract_chain", "B",
            "--ligand_name", ligand_name,
-           "--protein_name", protein_b]
+           "--protein_name", protein_b,
+           "--dim_reduction", "pca"]
     run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
     
     print("Step 3 Complete.")

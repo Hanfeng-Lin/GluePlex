@@ -6,7 +6,7 @@ import sys
 # ==========================================
 # Configuration Parameters
 # ==========================================
-# Fixed parameters for CRBN (Partner 2)
+# Fixed parameters for CRBN (Partner 1)
 CRBN_PDB = "CRBN_pesto.pdb"
 CRBN_ACTIVE_RES = "105,332,341"
 # ==========================================

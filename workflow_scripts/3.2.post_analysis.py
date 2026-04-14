@@ -148,7 +148,9 @@ def main():
     parser.add_argument("--extract_chain", default="A", help="Chain ID to extract coordinates from (Mobile Target).")
     parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand.")
     parser.add_argument("--protein_name", default="Protein", help="Name of the protein.")
-    
+    parser.add_argument("--dim_reduction", default="umap", choices=["umap", "pca"],
+                        help="Dimensionality reduction method: 'umap' (default) or 'pca'.")
+
     args = parser.parse_args()
     
     # 1. Collect results
@@ -157,20 +159,27 @@ def main():
     # 2. Align and extract
     align_and_extract(args.results_dir, args.output_csv, args.align_chain, args.extract_chain)
     
-    # 3. Run UMAP visualization
-    print("Running UMAP visualization...")
-    # Assuming _umap_coord_energy.py is in the same directory as this script
+    # 3. Run dimensionality reduction visualization
+    method = args.dim_reduction.lower()
+    script_map = {
+        "umap": "_umap_coord_energy.py",
+        "pca":  "_pca_coord_energy.py",
+    }
+    script_filename = script_map[method]
+    print(f"Running {method.upper()} visualization ({script_filename})...")
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    umap_script = os.path.join(script_dir, "_umap_coord_energy.py")
-    
-    if os.path.exists(umap_script):
+    vis_script = os.path.join(script_dir, script_filename)
+
+    if os.path.exists(vis_script):
         try:
-            cmd = [sys.executable, umap_script, "--ligand_name", args.ligand_name, "--protein_name", args.protein_name]
+            cmd = [sys.executable, vis_script,
+                   "--ligand_name", args.ligand_name,
+                   "--protein_name", args.protein_name]
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:
-            print(f"Error running UMAP script: {e}")
+            print(f"Error running {method.upper()} script: {e}")
     else:
-        print(f"Warning: UMAP script not found at {umap_script}")
+        print(f"Warning: {method.upper()} script not found at {vis_script}")
     
     print("Post-analysis complete.")
 
