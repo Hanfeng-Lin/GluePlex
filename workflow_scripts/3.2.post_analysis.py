@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import shutil
 import glob
@@ -45,7 +46,7 @@ def get_ca_coords(structure, chain_id):
             break
     return coords
 
-def align_and_extract(results_dir, output_csv, align_chain="B", extract_chain="A"):
+def align_and_extract(results_dir, output_csv, align_chain="A", extract_chain="B"):
     """Align structures and extract coordinates/scores."""
     pdb_files = sorted(glob.glob(os.path.join(results_dir, "*.pdb")))
     if not pdb_files:
@@ -64,7 +65,7 @@ def align_and_extract(results_dir, output_csv, align_chain="B", extract_chain="A
     
     num_atoms = len(ref_extract_coords) // 3
     
-    headers = ["file", "cluster", "ipTM", "pair_chains_ipTM_CRBN_VAV1_avg"]
+    headers = ["file", "cluster", "pass", "ipTM", "pair_chains_ipTM_avg"]
     for i in range(1, num_atoms + 1):
         headers.extend([f"{i}x", f"{i}y", f"{i}z"])
         
@@ -122,12 +123,16 @@ def align_and_extract(results_dir, output_csv, align_chain="B", extract_chain="A
             # Fallback for older naming convention if needed, but standard boltz is consistent
             print(f"Warning: JSON score file not found for {basename} at {json_file}")
 
-        try:
-            cluster = basename.split("template")[1].split("_")[0]
-        except:
-            cluster = "0"
+        m_pass2 = re.search(r"pass2_top(\d+)", basename)
+        if m_pass2:
+            cluster = f"p2_top{m_pass2.group(1)}"
+            pass_num = 2
+        else:
+            m_t = re.search(r"template(\d+)", basename)
+            cluster = m_t.group(1) if m_t else "0"
+            pass_num = 1
 
-        row = [basename, cluster, iptm, pair_iptm] + extract_coords
+        row = [basename, cluster, pass_num, iptm, pair_iptm] + extract_coords
         data_rows.append(row)
         
     # Write CSV
@@ -144,8 +149,8 @@ def main():
     parser.add_argument("--source_dir", required=True, help="Directory containing Boltz output folders.")
     parser.add_argument("--results_dir", default="results", help="Directory to collect flattened results.")
     parser.add_argument("--output_csv", default="atom.csv", help="Output CSV filename.")
-    parser.add_argument("--align_chain", default="B", help="Chain ID to align on (Fixed Partner).")
-    parser.add_argument("--extract_chain", default="A", help="Chain ID to extract coordinates from (Mobile Target).")
+    parser.add_argument("--align_chain", default="A", help="Chain ID to align on (Fixed Partner, e.g. CRBN).")
+    parser.add_argument("--extract_chain", default="B", help="Chain ID to extract coordinates from (Mobile Target).")
     parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand.")
     parser.add_argument("--protein_name", default="Protein", help="Name of the protein.")
     parser.add_argument("--dim_reduction", default="umap", choices=["umap", "pca"],
@@ -174,7 +179,8 @@ def main():
         try:
             cmd = [sys.executable, vis_script,
                    "--ligand_name", args.ligand_name,
-                   "--protein_name", args.protein_name]
+                   "--protein_name", args.protein_name,
+                   "--input_csv", args.output_csv]
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error running {method.upper()} script: {e}")

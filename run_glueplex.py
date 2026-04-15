@@ -286,10 +286,59 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
     
     print("Step 3 Complete.")
 
+def step4_double_pass(config, config_path, project_dir, log_file, override=False):
+    """Pass-2 Boltz refinement: top-N from step-3 atom.csv as templates, then merged post-analysis."""
+    if log_file:
+        with open(log_file, 'w') as f:
+            f.write("")
+
+    print("\n=== Step 4: Double-Pass Boltz ===")
+
+    step3_dir = os.path.join(project_dir, "step3_boltz")
+    step4_dir = os.path.join(project_dir, "step4_boltz")
+    if not os.path.exists(step3_dir):
+        print(f"Error: step 3 directory {step3_dir} not found — run step 3 first.")
+        sys.exit(1)
+    if not os.path.exists(step4_dir):
+        os.makedirs(step4_dir)
+
+    abs_config_path = os.path.abspath(config_path)
+
+    # 4.1 Prepare pass-2 jobs
+    print("Preparing pass-2 jobs (4.1)...")
+    script_41 = os.path.abspath("workflow_scripts/4.1.prepare_second_pass.py")
+    cmd = ["python", script_41,
+           "--config", abs_config_path,
+           "--step3_dir", step3_dir,
+           "--step4_dir", step4_dir]
+    if override:
+        cmd.append("--override")
+    run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+
+    # 4.2 Run pass-2 Boltz jobs
+    print("Running pass-2 Boltz jobs (4.2)...")
+    script_42 = os.path.abspath("workflow_scripts/4.2.run_second_pass.py")
+    cmd = ["python", script_42, "--step4_dir", step4_dir]
+    run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+
+    # 4.3 Merge + unified post-analysis
+    print("Merging pass-1 + pass-2 and running post-analysis (4.3)...")
+    script_43 = os.path.abspath("workflow_scripts/4.3.merge_and_analyze.py")
+    cmd = ["python", script_43,
+           "--config", abs_config_path,
+           "--step3_dir", step3_dir,
+           "--step4_dir", step4_dir,
+           "--output_csv", "atom_2ndpass.csv",
+           "--dim_reduction", "pca"]
+    run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+
+    print("Step 4 Complete.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="GluePlex Workflow Orchestrator")
     parser.add_argument("--config", default="project_config.yaml", help="Path to project configuration file.")
-    parser.add_argument("--step", type=int, default=0, help="Step to run (1, 2, 3). 0 runs all.")
+    parser.add_argument("--step", type=int, default=0, help="Step to run (1, 2, 3, 4). 0 runs all.")
     parser.add_argument("--override", action="store_true", help="Override existing Boltz predictions.")
     
     args = parser.parse_args()
@@ -299,9 +348,20 @@ def main():
         sys.exit(1)
         
     config = load_config(args.config)
-    
-    # Create Project Directory
-    project_name = config.get('project_name', 'GluePlex_Project')
+
+    # Create Project Directory.
+    # On the doublepass branch, the canonical layout is
+    # Result_{protein_a_name}_{protein_b_name}_GluePlex2pass — derive it from
+    # step3 names so configs don't need to hardcode the project name.
+    step3_cfg = config.get('step3', {}) or {}
+    a_name = step3_cfg.get('protein_a_name')
+    b_name = step3_cfg.get('protein_b_name')
+    if a_name and b_name:
+        # Convention on disk: target (b) first, then E3 (a) — matches existing
+        # Result_{b_name}_{a_name}_GluePlex2pass directories.
+        project_name = f"Result_{b_name}_{a_name}_GluePlex2pass"
+    else:
+        project_name = config.get('project_name', 'GluePlex_Project')
     base_dir = config.get('base_dir', os.getcwd())
     project_dir = os.path.join(base_dir, project_name)
     
@@ -332,6 +392,7 @@ def main():
     log_step1 = os.path.join(logs_dir, "step1_pesto.log")
     log_step2 = os.path.join(logs_dir, "step2_haddock.log")
     log_step3 = os.path.join(logs_dir, "step3_boltz.log")
+    log_step4 = os.path.join(logs_dir, "step4_double_pass.log")
     
     # Step 1
     if args.step == 0 or args.step == 1:
@@ -361,6 +422,10 @@ def main():
     if args.step == 0 or args.step == 3:
         # Use the config in input_dir for step 3 to ensure consistency
         step3_boltz(config, haddock_run_dir, config_dest, project_dir, log_step3, override=args.override)
+
+    # Step 4 (double-pass refinement)
+    if args.step == 0 or args.step == 4:
+        step4_double_pass(config, config_dest, project_dir, log_step4, override=args.override)
 
 if __name__ == "__main__":
     main()
