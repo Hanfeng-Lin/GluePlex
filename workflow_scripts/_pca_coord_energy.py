@@ -22,18 +22,23 @@ CONTINUOUS_PALETTE = tuple(rgb2hex(_cmap_continuous(i / 255)) for i in range(256
 # ── Args ─────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="PCA visualization.")
 parser.add_argument("--ligand_name",  default="Ligand",   help="Name of the ligand for plot titles.")
-parser.add_argument("--protein_name", default="Protein",  help="Name of the protein for plot titles.")
+parser.add_argument("--protein_name", default="Protein",  help="Name of the target protein (B) for plot titles.")
+parser.add_argument("--protein_a_name", default="",       help="Name of the fixed protein (A, e.g. CRBN).")
 parser.add_argument("--input_csv",    default="atom.csv", help="Input CSV written by 3.2.post_analysis.py.")
 args = parser.parse_args()
 
 ligand_name  = args.ligand_name
 protein_name = args.protein_name
+# Filename suffix: e.g. "_CRBN_G3BP2"
+name_suffix = f"_{args.protein_a_name}_{protein_name}" if args.protein_a_name else ""
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 coordinates = pd.read_csv(args.input_csv)
 meta_cols = ["ipTM", "file", "cluster", "pair_chains_ipTM_avg"]
 if "pass" in coordinates.columns:
     meta_cols.append("pass")
+if "ref_rmsd" in coordinates.columns:
+    meta_cols.append("ref_rmsd")
 coordinates_data = coordinates.drop(columns=meta_cols).values
 
 # ── PCA ───────────────────────────────────────────────────────────────────────
@@ -111,9 +116,9 @@ p_cluster.add_tools(HoverTool(tooltips=[
 p_cluster.legend.title = "Cluster"
 p_cluster.legend.click_policy = "hide"
 
-output_file("PCA_cluster.html")
+output_file(f"PCA_cluster{name_suffix}.html")
 save(p_cluster)
-print("Saved PCA_cluster.html")
+print(f"Saved PCA_cluster{name_suffix}.html")
 
 # ── 2. ipTM plot ──────────────────────────────────────────────────────────────
 source_iptm = _shared_source()
@@ -145,9 +150,9 @@ cbar_iptm = ColorBar(color_mapper=iptm_mapper, label_standoff=10, title="ipTM",
                      width=12, location=(0, 0))
 p_iptm.add_layout(cbar_iptm, "right")
 
-output_file("PCA_ipTM.html")
+output_file(f"PCA_ipTM{name_suffix}.html")
 save(p_iptm)
-print("Saved PCA_ipTM.html")
+print(f"Saved PCA_ipTM{name_suffix}.html")
 
 # ── 3. chainpair_ipTM plot ────────────────────────────────────────────────────
 source_cp = _shared_source()
@@ -179,9 +184,9 @@ cbar_cp = ColorBar(color_mapper=cp_mapper, label_standoff=10,
                    title="chainpair_ipTM", width=12, location=(0, 0))
 p_cp.add_layout(cbar_cp, "right")
 
-output_file("PCA_chainpair_ipTM.html")
+output_file(f"PCA_chainpair_ipTM{name_suffix}.html")
 save(p_cp)
-print("Saved PCA_chainpair_ipTM.html")
+print(f"Saved PCA_chainpair_ipTM{name_suffix}.html")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STATIC PNG PLOTS (matplotlib) — pass-2 points rendered with black edge
@@ -215,7 +220,7 @@ plt.xlabel(pc1_label, fontsize=14)
 plt.ylabel(pc2_label, fontsize=14)
 plt.title(f"{protein_name} – {ligand_name}  Co-folding from Cluster", pad=16, fontsize=16)
 plt.tight_layout()
-plt.savefig("PCA_cluster.png", dpi=300)
+plt.savefig(f"PCA_cluster{name_suffix}.png", dpi=300)
 plt.close()
 
 def _scatter_continuous(values, label, outfile, title_suffix):
@@ -244,9 +249,72 @@ def _scatter_continuous(values, label, outfile, title_suffix):
     plt.close()
 
 # ── 2. ipTM PNG ───────────────────────────────────────────────────────────────
-_scatter_continuous(iptm_vals, "ipTM", "PCA_ipTM.png", "Co-folding Score")
+_scatter_continuous(iptm_vals, "ipTM", f"PCA_ipTM{name_suffix}.png", "Co-folding Score")
 
 # ── 3. chainpair_ipTM PNG ────────────────────────────────────────────────────
-_scatter_continuous(chainp_vals, "chainpair_ipTM", "PCA_chainpair_ipTM.png", "Co-folding Score")
+_scatter_continuous(chainp_vals, "chainpair_ipTM", f"PCA_chainpair_ipTM{name_suffix}.png", "Co-folding Score")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REF RMSD PLOTS (only if ref_rmsd column exists and has values)
+# ══════════════════════════════════════════════════════════════════════════════
+
+if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
+    rmsd_vals = coordinates["ref_rmsd"].fillna(0).values.astype(float)
+    rmsd_clamped = np.clip(rmsd_vals, 0, 10)
+
+    # Bokeh interactive
+    _rmsd_palette = tuple(rgb2hex(_cmap_continuous(i / 255)) for i in range(256))
+    rmsd_mapper = LinearColorMapper(palette=_rmsd_palette, low=0.0, high=10.0)
+    source_rmsd = _shared_source()
+    source_rmsd.data["ref_rmsd"] = [float(v) for v in rmsd_clamped]
+
+    p_rmsd = figure(
+        title=f"{protein_name} – {ligand_name}  |  Ref RMSD (chain B CA)",
+        width=700, height=600, tools=TOOLS,
+        x_axis_label=pc1_label, y_axis_label=pc2_label,
+    )
+    p_rmsd.circle(
+        "x", "y", source=source_rmsd, size=POINT_SIZE,
+        fill_color={"field": "ref_rmsd", "transform": rmsd_mapper},
+        line_color="line_color", line_width="line_width", alpha=0.85,
+    )
+    p_rmsd.add_tools(HoverTool(tooltips=[
+        ("conformation", "@conformation"), ("cluster", "@cluster"),
+        ("pass", "@pass_num"), ("ref_rmsd", "@ref_rmsd{0.00}"),
+        ("ipTM", "@iptm{0.000}"), ("chainpair_ipTM", "@chainpair_iptm{0.000}"),
+    ]))
+    cbar_rmsd = ColorBar(color_mapper=rmsd_mapper, label_standoff=10,
+                         title="ref_rmsd (Å)", width=12, location=(0, 0))
+    p_rmsd.add_layout(cbar_rmsd, "right")
+    output_file(f"PCA_ref_rmsd{name_suffix}.html")
+    save(p_rmsd)
+    print(f"Saved PCA_ref_rmsd{name_suffix}.html")
+
+    # Static PNG (0-10 range)
+    cmap_rmsd = plt.cm.RdYlBu.reversed()
+    plt.figure(figsize=(7, 6))
+    if p1_mask.any():
+        plt.scatter(embedding[p1_mask, 0], embedding[p1_mask, 1],
+                    c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
+                    edgecolors="none")
+    sc = None
+    if p2_mask.any():
+        sc = plt.scatter(embedding[p2_mask, 0], embedding[p2_mask, 1],
+                         c=rmsd_clamped[p2_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
+                         edgecolors="black", linewidths=0.8)
+    if sc is None:
+        sc = plt.scatter(embedding[p1_mask, 0], embedding[p1_mask, 1],
+                         c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
+                         edgecolors="none")
+    cbar = plt.colorbar(sc, boundaries=np.linspace(0, 10, 256))
+    cbar.set_label("ref_rmsd (Å)", rotation=270, labelpad=16)
+    cbar.set_ticks(np.arange(0, 10.1, 2))
+    plt.xlabel(pc1_label, fontsize=14)
+    plt.ylabel(pc2_label, fontsize=14)
+    plt.title(f"{protein_name} – {ligand_name}  Ref RMSD", pad=16, fontsize=16)
+    plt.tight_layout()
+    plt.savefig(f"PCA_ref_rmsd{name_suffix}.png", dpi=300)
+    plt.close()
+    print(f"Saved PCA_ref_rmsd{name_suffix}.png")
 
 print("All PCA plots saved.")

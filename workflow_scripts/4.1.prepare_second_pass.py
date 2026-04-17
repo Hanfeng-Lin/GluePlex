@@ -254,6 +254,20 @@ def main():
     manifest.write_text("\n".join(str(s) for s in scripts) + "\n")
     print(f"Wrote {len(scripts)} run scripts; manifest at {manifest}")
 
+    # Save rename mapping log
+    protein_a_name = step3_config["protein_a_name"]
+    protein_b_name = step3_config["protein_b_name"]
+    log_path = step4_dir / "pass2_template_mapping.log"
+    with open(log_path, "w") as lf:
+        lf.write("Pass-2 template mapping (step 3 source -> step 4 rename)\n")
+        lf.write(f"{'Rank':<6}{'pair_ipTM':>12}  {'Source (step 3)':<55} {'Pass-2 name'}\n")
+        lf.write(f"{'-'*110}\n")
+        for rank, template_pdb, score in selection:
+            job_tag = f"pass2_top{rank}"
+            new_name = f"{protein_a_name}_{protein_b_name}_{job_tag}"
+            lf.write(f"{rank:<6}{score:>12.4f}  {template_pdb.name:<55} {new_name}\n")
+    print(f"Template mapping log saved to {log_path}")
+
 
 if __name__ == "__main__":
     main()

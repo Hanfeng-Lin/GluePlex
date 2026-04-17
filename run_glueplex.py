@@ -215,7 +215,7 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     print("Step 2 Complete.")
     return run_dir
 
-def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, override=False):
+def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, override=False, ref_pdb=None):
     # Clear log file
     if log_file:
         with open(log_file, 'w') as f:
@@ -281,12 +281,15 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--extract_chain", "B",
            "--ligand_name", ligand_name,
            "--protein_name", protein_b,
+           "--protein_a_name", protein_a,
            "--dim_reduction", "pca"]
+    if ref_pdb:
+        cmd.extend(["--ref_pdb", ref_pdb])
     run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
-    
+
     print("Step 3 Complete.")
 
-def step4_double_pass(config, config_path, project_dir, log_file, override=False):
+def step4_double_pass(config, config_path, project_dir, log_file, override=False, ref_pdb=None):
     """Pass-2 Boltz refinement: top-N from step-3 atom.csv as templates, then merged post-analysis."""
     if log_file:
         with open(log_file, 'w') as f:
@@ -330,6 +333,8 @@ def step4_double_pass(config, config_path, project_dir, log_file, override=False
            "--step4_dir", step4_dir,
            "--output_csv", "atom_2ndpass.csv",
            "--dim_reduction", "pca"]
+    if ref_pdb:
+        cmd.extend(["--ref_pdb", ref_pdb])
     run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
 
     print("Step 4 Complete.")
@@ -340,6 +345,11 @@ def main():
     parser.add_argument("--config", default="project_config.yaml", help="Path to project configuration file.")
     parser.add_argument("--step", type=int, default=0, help="Step to run (1, 2, 3, 4). 0 runs all.")
     parser.add_argument("--override", action="store_true", help="Override existing Boltz predictions.")
+    parser.add_argument("--doublepass", default=True, action=argparse.BooleanOptionalAction,
+                        help="Run step 4 (double-pass Boltz refinement) after step 3. "
+                             "Enabled by default; use --no-doublepass to skip.")
+    parser.add_argument("--ref", default=None,
+                        help="Reference PDB for RMSD calculation. Must have 3 chains (A, B, ligand).")
     
     args = parser.parse_args()
     
@@ -348,6 +358,23 @@ def main():
         sys.exit(1)
         
     config = load_config(args.config)
+
+    # Validate reference PDB if provided
+    abs_ref = None
+    if args.ref:
+        if not os.path.exists(args.ref):
+            print(f"Error: Reference PDB {args.ref} not found.")
+            sys.exit(1)
+        abs_ref = os.path.abspath(args.ref)
+        chains = set()
+        with open(abs_ref) as f:
+            for line in f:
+                if line.startswith(("ATOM", "HETATM")) and len(line) > 21:
+                    chains.add(line[21])
+        if len(chains) != 3:
+            print(f"Error: Reference PDB must have exactly 3 chains, found {len(chains)}: {sorted(chains)}")
+            sys.exit(1)
+        print(f"Reference PDB: {abs_ref} (chains: {sorted(chains)})")
 
     # Create Project Directory.
     # On the doublepass branch, the canonical layout is
@@ -421,11 +448,13 @@ def main():
     # Step 3
     if args.step == 0 or args.step == 3:
         # Use the config in input_dir for step 3 to ensure consistency
-        step3_boltz(config, haddock_run_dir, config_dest, project_dir, log_step3, override=args.override)
+        step3_boltz(config, haddock_run_dir, config_dest, project_dir, log_step3,
+                    override=args.override, ref_pdb=abs_ref)
 
     # Step 4 (double-pass refinement)
-    if args.step == 0 or args.step == 4:
-        step4_double_pass(config, config_dest, project_dir, log_step4, override=args.override)
+    if args.step == 4 or (args.step == 0 and args.doublepass):
+        step4_double_pass(config, config_dest, project_dir, log_step4,
+                          override=args.override, ref_pdb=abs_ref)
 
 if __name__ == "__main__":
     main()

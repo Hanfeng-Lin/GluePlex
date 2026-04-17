@@ -7,6 +7,7 @@ test_*_template_folding/
 # Target-specific configs and PDBs (project-specific inputs)
 project_config_*.yaml
 /*.pdb
+/*.cif
 # Already-tracked VAV1_af2.pdb and CRBN_pesto.pdb remain tracked;
 # gitignore only affects untracked files.
 
@@ -23,3 +24,4 @@ __pycache__/
 *.swp
 .vscode/
 .idea/
+.claude/

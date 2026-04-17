@@ -144,6 +144,7 @@ def align_and_extract(results_dir, output_csv, align_chain="A", extract_chain="B
         
     print(f"Saved aligned coordinates and scores to {output_csv}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Run Boltz post-analysis.")
     parser.add_argument("--source_dir", required=True, help="Directory containing Boltz output folders.")
@@ -152,7 +153,9 @@ def main():
     parser.add_argument("--align_chain", default="A", help="Chain ID to align on (Fixed Partner, e.g. CRBN).")
     parser.add_argument("--extract_chain", default="B", help="Chain ID to extract coordinates from (Mobile Target).")
     parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand.")
-    parser.add_argument("--protein_name", default="Protein", help="Name of the protein.")
+    parser.add_argument("--protein_name", default="Protein", help="Name of the target protein (protein B).")
+    parser.add_argument("--protein_a_name", default="", help="Name of the fixed protein (protein A, e.g. CRBN).")
+    parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
     parser.add_argument("--dim_reduction", default="umap", choices=["umap", "pca"],
                         help="Dimensionality reduction method: 'umap' (default) or 'pca'.")
 
@@ -163,7 +166,48 @@ def main():
     
     # 2. Align and extract
     align_and_extract(args.results_dir, args.output_csv, args.align_chain, args.extract_chain)
-    
+
+    # 2b. Compute reference RMSD (if --ref_pdb provided)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if args.ref_pdb:
+        ref_script = os.path.join(script_dir, "_ref_align_rmsd.py")
+        if os.path.exists(ref_script):
+            print(f"Computing ref RMSD against {args.ref_pdb}...")
+            cmd = [sys.executable, ref_script,
+                   "--ref_pdb", args.ref_pdb,
+                   "--input_csv", args.output_csv,
+                   "--results_dir", args.results_dir,
+                   "--align_chain", args.align_chain,
+                   "--extract_chain", args.extract_chain]
+            try:
+                subprocess.run(cmd, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: ref RMSD computation failed: {e}")
+        else:
+            print(f"Warning: _ref_align_rmsd.py not found at {ref_script}")
+
+    # 2c. Save top-10 log (after ref_rmsd so it can include that column)
+    import pandas as _pd
+    _df = _pd.read_csv(args.output_csv)
+    _df_sorted = _df.sort_values("pair_chains_ipTM_avg", ascending=False).head(10)
+    log_path = os.path.join(os.path.dirname(args.output_csv) or ".", "top10_models.log")
+    with open(log_path, "w") as lf:
+        has_rmsd = "ref_rmsd" in _df.columns
+        hdr = f"{'Rank':<6}{'pair_ipTM':>12}{'ipTM':>10}"
+        if has_rmsd:
+            hdr += f"{'ref_rmsd':>10}"
+        hdr += f"  {'File'}"
+        lf.write(f"Top {len(_df_sorted)} models by pair_chains_ipTM_avg\n")
+        lf.write(hdr + "\n")
+        lf.write("-" * len(hdr) + "\n")
+        for i, (_, r) in enumerate(_df_sorted.iterrows(), 1):
+            line = f"{i:<6}{r['pair_chains_ipTM_avg']:>12.4f}{r['ipTM']:>10.4f}"
+            if has_rmsd:
+                line += f"{r['ref_rmsd']:>10.3f}" if not _pd.isna(r['ref_rmsd']) else f"{'NaN':>10}"
+            line += f"  {r['file']}"
+            lf.write(line + "\n")
+    print(f"Top-10 model log saved to {log_path}")
+
     # 3. Run dimensionality reduction visualization
     method = args.dim_reduction.lower()
     script_map = {
@@ -172,7 +216,6 @@ def main():
     }
     script_filename = script_map[method]
     print(f"Running {method.upper()} visualization ({script_filename})...")
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     vis_script = os.path.join(script_dir, script_filename)
 
     if os.path.exists(vis_script):
@@ -180,6 +223,7 @@ def main():
             cmd = [sys.executable, vis_script,
                    "--ligand_name", args.ligand_name,
                    "--protein_name", args.protein_name,
+                   "--protein_a_name", args.protein_a_name,
                    "--input_csv", args.output_csv]
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:

@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--step3_dir", required=True)
     parser.add_argument("--step4_dir", required=True)
     parser.add_argument("--output_csv", default="atom_2ndpass.csv")
+    parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
     parser.add_argument("--dim_reduction", default="pca", choices=["umap", "pca"])
     args = parser.parse_args()
 
@@ -86,8 +87,11 @@ def main():
         "--extract_chain", "B",
         "--ligand_name", ligand_name,
         "--protein_name", protein_b,
+        "--protein_a_name", protein_a,
         "--dim_reduction", args.dim_reduction,
     ]
+    if args.ref_pdb:
+        cmd.extend(["--ref_pdb", args.ref_pdb])
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True, cwd=str(step4_dir))
     print(f"Combined post-analysis complete. See {step4_dir / args.output_csv}")
