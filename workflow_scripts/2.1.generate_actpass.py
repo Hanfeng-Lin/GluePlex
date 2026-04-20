@@ -72,13 +72,12 @@ def run_haddock3_ambig(actpass_file1, actpass_file2, output_filename):
 def main():
     parser = argparse.ArgumentParser(description="Generate HADDOCK3 restraints.")
     parser.add_argument("--target_pdb", required=True, help="Path to the target PDB file (Partner 1).")
-    parser.add_argument("--target_res", default="", help="Comma-separated active residues for the target.")
-    parser.add_argument("--target_unrestrained", action="store_true", help="Leave target unrestrained; only CRBN side has restraints.")
+    parser.add_argument("--target_res", required=True, help="Comma-separated active residues for the target.")
     parser.add_argument("--output", default="restraint.tbl", help="Output filename for the restraints table.")
-    
+
     args = parser.parse_args()
-    
-    # 1. Generate actpass for CRBN (always restrained)
+
+    # 1. Generate actpass for Target (Partner 1)
     if not os.path.exists(CRBN_PDB):
         print(f"Error: Fixed partner PDB {CRBN_PDB} not found in current directory.")
         sys.exit(1)
@@ -86,15 +85,9 @@ def main():
     actpass_1 = "actpass_1"
     run_haddock3_restraints(CRBN_PDB, CRBN_ACTIVE_RES, actpass_1)
 
-    # 2. Generate actpass for Target
+    # 2. Generate actpass for CRBN (Partner 2 - Fixed)
     actpass_2 = "actpass_2"
-    if args.target_unrestrained:
-        # Write an empty actpass file (no active, no passive) so CRBN drives the docking
-        print("Target is unrestrained — writing empty actpass for target side.")
-        with open(actpass_2, "w") as f:
-            f.write("\n\n")
-    else:
-        run_haddock3_restraints(args.target_pdb, args.target_res, actpass_2)
+    run_haddock3_restraints(args.target_pdb, args.target_res, actpass_2)
 
     # 3. Generate Ambiguous Restraints
     run_haddock3_ambig(actpass_1, actpass_2, args.output)

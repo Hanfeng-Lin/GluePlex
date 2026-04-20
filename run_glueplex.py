@@ -152,10 +152,9 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
                 
         print(f"Fetched active residues: {active_res}")
     
-    target_unrestrained = False
-    if not active_res or active_res == "NONE":
-        print("Warning: No active residues for target. Target will be unrestrained; CRBN restraints still apply.")
-        target_unrestrained = True
+    if not active_res:
+        print("Error: No active residues found or provided.")
+        sys.exit(1)
 
     # Copy CRBN_pesto.pdb to step2_dir
     # Assuming it's in the base directory (current working directory of the script)
@@ -180,11 +179,8 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     script_path = os.path.abspath("workflow_scripts/2.1.generate_actpass.py")
 
     cmd = ["python", script_path,
-           "--target_pdb", abs_target_pesto_pdb]
-    if target_unrestrained:
-        cmd.append("--target_unrestrained")
-    else:
-        cmd.extend(["--target_res", active_res])
+           "--target_pdb", abs_target_pesto_pdb,
+           "--target_res", active_res]
     cmd.extend(["--output", restraint_file])
 
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file)
