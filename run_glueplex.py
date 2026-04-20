@@ -152,9 +152,10 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
                 
         print(f"Fetched active residues: {active_res}")
     
-    if not active_res:
-        print("Error: No active residues found or provided.")
-        sys.exit(1)
+    target_unrestrained = False
+    if not active_res or active_res == "NONE":
+        print("Warning: No active residues for target. Target will be unrestrained; CRBN restraints still apply.")
+        target_unrestrained = True
 
     # Copy CRBN_pesto.pdb to step2_dir
     # Assuming it's in the base directory (current working directory of the script)
@@ -170,19 +171,22 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     # We run this inside step2_dir to keep generated files there
     print("Generating restraints...")
     restraint_file = "restraint.tbl"
-    
+
     # Need absolute path for target_pesto_pdb if changing cwd
     abs_target_pesto_pdb = os.path.abspath(target_pesto_pdb)
-    
+
     # Script path needs to be absolute or relative to step2_dir
     # Assuming run_glueplex.py is in base_dir
     script_path = os.path.abspath("workflow_scripts/2.1.generate_actpass.py")
-    
-    cmd = ["python", script_path, 
-           "--target_pdb", abs_target_pesto_pdb, 
-           "--target_res", active_res,
-           "--output", restraint_file]
-           
+
+    cmd = ["python", script_path,
+           "--target_pdb", abs_target_pesto_pdb]
+    if target_unrestrained:
+        cmd.append("--target_unrestrained")
+    else:
+        cmd.extend(["--target_res", active_res])
+    cmd.extend(["--output", restraint_file])
+
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file)
     
     # 2.2 Run HADDOCK3 Workflow

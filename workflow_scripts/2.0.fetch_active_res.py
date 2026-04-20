@@ -138,16 +138,31 @@ if __name__ == "__main__":
     pesto_res = get_pesto_residues(pdb_file)
     # print(f"PeSTo residues: {len(pesto_res)}")
     
-    # 2. Run NACCESS and get SASA residues
-    rsa_file = run_naccess(pdb_file)
-    sasa_res = get_sasa_residues(rsa_file)
-    # print(f"SASA residues: {len(sasa_res)}")
-    
-    # 3. Intersect
-    active_res = sorted(list(pesto_res.intersection(sasa_res)), key=lambda x: int(x) if x.isdigit() else x)
-    
-    # 4. Cleanup
-    # cleanup_naccess(rsa_file)
-    
+    # No PeSTo residues — skip SASA entirely, target will be unrestrained
+    if not pesto_res:
+        print("Warning: No PeSTo residues found. Target will be unrestrained in docking.", file=sys.stderr)
+        print("NONE")
+        sys.exit(0)
+
+    # 2. Run NACCESS and get SASA residues to filter PeSTo set
+    sasa_res = set()
+    try:
+        rsa_file = run_naccess(pdb_file)
+        sasa_res = get_sasa_residues(rsa_file)
+    except SystemExit:
+        print("Warning: naccess failed.", file=sys.stderr)
+
+    # 3. Intersect PeSTo with SASA; fall back to PeSTo-only if needed
+    if sasa_res:
+        active_res = pesto_res.intersection(sasa_res)
+        if not active_res:
+            active_res = pesto_res
+            print("Warning: PeSTo/SASA intersection empty, using PeSTo residues only.", file=sys.stderr)
+    else:
+        active_res = pesto_res
+        print("Warning: No SASA data, using PeSTo residues only.", file=sys.stderr)
+
+    active_res = sorted(list(active_res), key=lambda x: int(x) if x.isdigit() else x)
+
     # Print as comma-separated list
     print(",".join(active_res))
