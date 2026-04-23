@@ -383,10 +383,13 @@ def main():
     step3_cfg = config.get('step3', {}) or {}
     a_name = step3_cfg.get('protein_a_name')
     b_name = step3_cfg.get('protein_b_name')
+    lig_name = step3_cfg.get('ligand_name')
     if a_name and b_name:
-        # Convention on disk: target (b) first, then E3 (a) — matches existing
-        # Result_{b_name}_{a_name}_GluePlex2pass directories.
-        project_name = f"Result_{b_name}_{a_name}_GluePlex2pass"
+        # Convention on disk: target (b) first, then E3 (a), then ligand
+        if lig_name:
+            project_name = f"Result_{b_name}_{a_name}_{lig_name}_GluePlex2pass"
+        else:
+            project_name = f"Result_{b_name}_{a_name}_GluePlex2pass"
     else:
         project_name = config.get('project_name', 'GluePlex_Project')
     base_dir = config.get('base_dir', os.getcwd())

@@ -37,6 +37,21 @@ else:
 p1_mask = pass_vals == 1
 p2_mask = pass_vals == 2
 
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.size": 12,
+    "axes.labelsize": 16,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 13,
+    "ytick.labelsize": 13,
+    "axes.linewidth": 1.4,
+    "xtick.major.width": 1.2,
+    "ytick.major.width": 1.2,
+    "xtick.major.size": 5,
+    "ytick.major.size": 5,
+})
+MARKER_SIZE = 36
+
 reducer = umap.UMAP(n_neighbors=10, metric="euclidean", min_dist=1, random_state=42)
 embedding = reducer.fit(coordinates_data)
 
@@ -56,8 +71,7 @@ umap.plot.show(cluster_plot)
 embedding_xy = reducer.fit_transform(coordinates_data)
 
 # ── Cluster PNG with pass-aware edges ──
-plt.figure(figsize=(7, 6))
-ax = plt.gca()
+fig, ax = plt.subplots(figsize=(7, 6))
 int_clusters = sorted(set(coordinates["cluster"].astype(str).values))
 cmap_cat = matplotlib.colormaps.get_cmap("Spectral").resampled(len(int_clusters))
 cluster_color = {c: cmap_cat(i) for i, c in enumerate(int_clusters)}
@@ -68,21 +82,22 @@ for c in int_clusters:
     m2 = mask & p2_mask
     if m1.any():
         ax.scatter(embedding_xy[m1, 0], embedding_xy[m1, 1],
-                   color=cluster_color[c], s=20, label=str(c), edgecolors="none")
+                   color=cluster_color[c], s=MARKER_SIZE, label=str(c), edgecolors="none")
     if m2.any():
         ax.scatter(embedding_xy[m2, 0], embedding_xy[m2, 1],
-                   color=cluster_color[c], s=20,
+                   color=cluster_color[c], s=MARKER_SIZE,
                    label=None if m1.any() else str(c),
                    edgecolors="black", linewidths=0.8)
-ax.legend(title="Cluster", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
-ax.set_title(f"{protein_name} - {ligand_name} Co-folding from Cluster", pad=16, fontsize=16)
-ax.set_xlabel("UMAP_1", fontsize=14)
-ax.set_ylabel("UMAP_2", fontsize=14)
+ax.legend(title="Cluster", bbox_to_anchor=(1.05, 1), loc="upper left",
+          fontsize=10, title_fontsize=12)
+ax.set_title(f"{protein_name} – {ligand_name}  Co-folding from Cluster", pad=12)
+ax.set_xlabel("UMAP_1")
+ax.set_ylabel("UMAP_2")
 ax.xaxis.set_major_locator(ticker.AutoLocator())
 ax.yaxis.set_major_locator(ticker.AutoLocator())
-plt.tight_layout()
-plt.savefig(f"UMAP_cluster{name_suffix}.png", dpi=300)
-plt.close()
+fig.tight_layout()
+fig.savefig(f"UMAP_cluster{name_suffix}.png", dpi=600, bbox_inches="tight")
+plt.close(fig)
 
 cmap = plt.cm.RdYlBu.reversed()
 
@@ -93,29 +108,30 @@ ipTM_plot = umap.plot.interactive(embedding, values=coordinates["ipTM"].values, 
 umap.plot.show(ipTM_plot)
 
 def _scatter_continuous(values, label, outfile, title_suffix):
-    plt.figure(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(7, 6))
     if p1_mask.any():
-        plt.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
-                    c=values[p1_mask], cmap=cmap, s=20, vmin=0, vmax=1.05,
-                    edgecolors="none")
+        ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
+                   c=values[p1_mask], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
+                   edgecolors="none")
     sc = None
     if p2_mask.any():
-        sc = plt.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
-                         c=values[p2_mask], cmap=cmap, s=20, vmin=0, vmax=1.05,
-                         edgecolors="black", linewidths=0.8)
+        sc = ax.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
+                        c=values[p2_mask], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
+                        edgecolors="black", linewidths=0.8)
     if sc is None:
-        sc = plt.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
-                         c=values[p1_mask], cmap=cmap, s=20, vmin=0, vmax=1.05,
-                         edgecolors="none")
-    cbar = plt.colorbar(sc, boundaries=np.linspace(0, 1.05, 256))
-    cbar.set_label(label, rotation=270, labelpad=16)
+        sc = ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
+                        c=values[p1_mask], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
+                        edgecolors="none")
+    cbar = fig.colorbar(sc, ax=ax, boundaries=np.linspace(0, 1.05, 256))
+    cbar.set_label(label, rotation=270, labelpad=18, fontsize=14)
     cbar.set_ticks(np.arange(0, 1.01, 0.2))
-    plt.xlabel("UMAP_1", fontsize=14)
-    plt.ylabel("UMAP_2", fontsize=14)
-    plt.title(f"{protein_name} - {ligand_name} {title_suffix}", pad=16, fontsize=16)
-    plt.tight_layout()
-    plt.savefig(outfile, dpi=300)
-    plt.close()
+    cbar.ax.tick_params(labelsize=12)
+    ax.set_xlabel("UMAP_1")
+    ax.set_ylabel("UMAP_2")
+    ax.set_title(f"{protein_name} – {ligand_name}  {title_suffix}", pad=12)
+    fig.tight_layout()
+    fig.savefig(outfile, dpi=600, bbox_inches="tight")
+    plt.close(fig)
 
 _scatter_continuous(coordinates["ipTM"].values, "ipTM", f"UMAP_ipTM{name_suffix}.png", "Co-folding Score")
 
@@ -148,27 +164,28 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
 
     # Static PNG (0-10 clamped)
     cmap_rmsd = plt.cm.RdYlBu.reversed()
-    plt.figure(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(7, 6))
     if p1_mask.any():
-        plt.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
-                    c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
-                    edgecolors="none")
+        ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
+                   c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
+                   edgecolors="none")
     sc = None
     if p2_mask.any():
-        sc = plt.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
-                         c=rmsd_clamped[p2_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
-                         edgecolors="black", linewidths=0.8)
+        sc = ax.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
+                        c=rmsd_clamped[p2_mask], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
+                        edgecolors="black", linewidths=0.8)
     if sc is None:
-        sc = plt.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
-                         c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=20, vmin=0, vmax=10,
-                         edgecolors="none")
-    cbar_r = plt.colorbar(sc, boundaries=np.linspace(0, 10, 256))
-    cbar_r.set_label("ref_rmsd (Å)", rotation=270, labelpad=16)
+        sc = ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
+                        c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
+                        edgecolors="none")
+    cbar_r = fig.colorbar(sc, ax=ax, boundaries=np.linspace(0, 10, 256))
+    cbar_r.set_label("ref_rmsd (Å)", rotation=270, labelpad=18, fontsize=14)
     cbar_r.set_ticks(np.arange(0, 10.1, 2))
-    plt.xlabel("UMAP_1", fontsize=14)
-    plt.ylabel("UMAP_2", fontsize=14)
-    plt.title(f"{protein_name} - {ligand_name} Ref RMSD", pad=16, fontsize=16)
-    plt.tight_layout()
-    plt.savefig(f"UMAP_ref_rmsd{name_suffix}.png", dpi=300)
-    plt.close()
+    cbar_r.ax.tick_params(labelsize=12)
+    ax.set_xlabel("UMAP_1")
+    ax.set_ylabel("UMAP_2")
+    ax.set_title(f"{protein_name} – {ligand_name}  Ref RMSD", pad=12)
+    fig.tight_layout()
+    fig.savefig(f"UMAP_ref_rmsd{name_suffix}.png", dpi=600, bbox_inches="tight")
+    plt.close(fig)
     print(f"Saved UMAP_ref_rmsd{name_suffix}.png")
