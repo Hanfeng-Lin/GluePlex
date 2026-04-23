@@ -156,8 +156,8 @@ def main():
     parser.add_argument("--protein_name", default="Protein", help="Name of the target protein (protein B).")
     parser.add_argument("--protein_a_name", default="", help="Name of the fixed protein (protein A, e.g. CRBN).")
     parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
-    parser.add_argument("--dim_reduction", default="umap", choices=["umap", "pca"],
-                        help="Dimensionality reduction method: 'umap' (default) or 'pca'.")
+    parser.add_argument("--dim_reduction", default="all", choices=["umap", "pca", "all"],
+                        help="Dimensionality reduction method: 'umap', 'pca', or 'all' (default).")
 
     args = parser.parse_args()
     
@@ -209,27 +209,29 @@ def main():
     print(f"Top-10 model log saved to {log_path}")
 
     # 3. Run dimensionality reduction visualization
-    method = args.dim_reduction.lower()
     script_map = {
         "umap": "_umap_coord_energy.py",
         "pca":  "_pca_coord_energy.py",
     }
-    script_filename = script_map[method]
-    print(f"Running {method.upper()} visualization ({script_filename})...")
-    vis_script = os.path.join(script_dir, script_filename)
+    methods = list(script_map.keys()) if args.dim_reduction == "all" else [args.dim_reduction]
 
-    if os.path.exists(vis_script):
-        try:
-            cmd = [sys.executable, vis_script,
-                   "--ligand_name", args.ligand_name,
-                   "--protein_name", args.protein_name,
-                   "--protein_a_name", args.protein_a_name,
-                   "--input_csv", args.output_csv]
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error running {method.upper()} script: {e}")
-    else:
-        print(f"Warning: {method.upper()} script not found at {vis_script}")
+    for method in methods:
+        script_filename = script_map[method]
+        print(f"Running {method.upper()} visualization ({script_filename})...")
+        vis_script = os.path.join(script_dir, script_filename)
+
+        if os.path.exists(vis_script):
+            try:
+                cmd = [sys.executable, vis_script,
+                       "--ligand_name", args.ligand_name,
+                       "--protein_name", args.protein_name,
+                       "--protein_a_name", args.protein_a_name,
+                       "--input_csv", args.output_csv]
+                subprocess.run(cmd, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Error running {method.upper()} script: {e}")
+        else:
+            print(f"Warning: {method.upper()} script not found at {vis_script}")
     
     print("Post-analysis complete.")
 

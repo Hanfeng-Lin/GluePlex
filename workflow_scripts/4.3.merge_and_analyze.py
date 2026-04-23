@@ -51,7 +51,7 @@ def main():
     parser.add_argument("--step4_dir", required=True)
     parser.add_argument("--output_csv", default="atom_2ndpass.csv")
     parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
-    parser.add_argument("--dim_reduction", default="pca", choices=["umap", "pca"])
+    parser.add_argument("--dim_reduction", default="all", choices=["umap", "pca", "all"])
     args = parser.parse_args()
 
     with open(args.config) as f:

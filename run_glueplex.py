@@ -282,7 +282,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--ligand_name", ligand_name,
            "--protein_name", protein_b,
            "--protein_a_name", protein_a,
-           "--dim_reduction", "pca"]
+           "--dim_reduction", "all"]
     if ref_pdb:
         cmd.extend(["--ref_pdb", ref_pdb])
     run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
@@ -332,7 +332,7 @@ def step4_double_pass(config, config_path, project_dir, log_file, override=False
            "--step3_dir", step3_dir,
            "--step4_dir", step4_dir,
            "--output_csv", "atom_2ndpass.csv",
-           "--dim_reduction", "pca"]
+           "--dim_reduction", "all"]
     if ref_pdb:
         cmd.extend(["--ref_pdb", ref_pdb])
     run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
