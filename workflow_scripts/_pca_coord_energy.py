@@ -280,7 +280,8 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
     rmsd_clamped = np.clip(rmsd_vals, 0, 10)
 
     # Bokeh interactive
-    _rmsd_palette = tuple(rgb2hex(_cmap_continuous(i / 255)) for i in range(256))
+    _cmap_rmsd_bokeh = plt.cm.RdYlBu
+    _rmsd_palette = tuple(rgb2hex(_cmap_rmsd_bokeh(i / 255)) for i in range(256))
     rmsd_mapper = LinearColorMapper(palette=_rmsd_palette, low=0.0, high=10.0)
     source_rmsd = _shared_source()
     source_rmsd.data["ref_rmsd"] = [float(v) for v in rmsd_clamped]
@@ -308,7 +309,7 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
     print(f"Saved PCA_ref_rmsd{name_suffix}.html")
 
     # Static PNG (0-10 range)
-    cmap_rmsd = plt.cm.RdYlBu.reversed()
+    cmap_rmsd = plt.cm.RdYlBu
     fig, ax = plt.subplots(figsize=(7, 6))
     if p1_mask.any():
         ax.scatter(embedding[p1_mask, 0], embedding[p1_mask, 1],

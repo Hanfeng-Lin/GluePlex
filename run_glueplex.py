@@ -215,47 +215,49 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     print("Step 2 Complete.")
     return run_dir
 
-def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, override=False, ref_pdb=None):
+def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, override=False, ref_pdb=None, replot=False):
     # Clear log file
     if log_file:
         with open(log_file, 'w') as f:
             f.write("")
-            
+
     print("\n=== Step 3: Boltz ===")
-    
+
     # Output directory for Step 3
     step3_dir = os.path.join(project_dir, "step3_boltz")
     if not os.path.exists(step3_dir):
         os.makedirs(step3_dir)
-    
-    # 3.1 Run Batch Clusters
-    # Input dir for CIF files is step2_haddock (where 2.3 exported them)
-    step2_dir = os.path.join(project_dir, "step2_haddock")
-    if not os.path.exists(step2_dir):
-         print(f"Error: Step 2 directory {step2_dir} not found.")
-         sys.exit(1)
-    input_dir = step2_dir
-    
+
     # Boltz output dir inside step3_dir
-    # config['boltz_output_dir'] might be "boltz_results"
     boltz_out_name = config.get('boltz_output_dir', 'boltz_results')
     output_dir = os.path.join(step3_dir, os.path.basename(boltz_out_name))
-    
-    print(f"Running Boltz batch processing from {input_dir}...")
-    
-    script_path_31 = os.path.abspath("workflow_scripts/3.1.run_batch_clusters.py")
-    abs_config_path = os.path.abspath(config_path)
-    
-    cmd = ["python", script_path_31,
-           "--config", abs_config_path,
-           "--input_dir", input_dir,
-           "--output_dir", output_dir]
-           
-    if override:
-        cmd.append("--override")
-    
-    run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
-    
+
+    if not replot:
+        # 3.1 Run Batch Clusters
+        # Input dir for CIF files is step2_haddock (where 2.3 exported them)
+        step2_dir = os.path.join(project_dir, "step2_haddock")
+        if not os.path.exists(step2_dir):
+             print(f"Error: Step 2 directory {step2_dir} not found.")
+             sys.exit(1)
+        input_dir = step2_dir
+
+        print(f"Running Boltz batch processing from {input_dir}...")
+
+        script_path_31 = os.path.abspath("workflow_scripts/3.1.run_batch_clusters.py")
+        abs_config_path = os.path.abspath(config_path)
+
+        cmd = ["python", script_path_31,
+               "--config", abs_config_path,
+               "--input_dir", input_dir,
+               "--output_dir", output_dir]
+
+        if override:
+            cmd.append("--override")
+
+        run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
+    else:
+        print("Skipping Boltz predictions (--replot mode).")
+
     # 3.2 Post Analysis
     print("Running Post Analysis...")
     
@@ -289,7 +291,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
 
     print("Step 3 Complete.")
 
-def step4_double_pass(config, config_path, project_dir, log_file, override=False, ref_pdb=None):
+def step4_double_pass(config, config_path, project_dir, log_file, override=False, ref_pdb=None, replot=False):
     """Pass-2 Boltz refinement: top-N from step-3 atom.csv as templates, then merged post-analysis."""
     if log_file:
         with open(log_file, 'w') as f:
@@ -307,22 +309,25 @@ def step4_double_pass(config, config_path, project_dir, log_file, override=False
 
     abs_config_path = os.path.abspath(config_path)
 
-    # 4.1 Prepare pass-2 jobs
-    print("Preparing pass-2 jobs (4.1)...")
-    script_41 = os.path.abspath("workflow_scripts/4.1.prepare_second_pass.py")
-    cmd = ["python", script_41,
-           "--config", abs_config_path,
-           "--step3_dir", step3_dir,
-           "--step4_dir", step4_dir]
-    if override:
-        cmd.append("--override")
-    run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+    if not replot:
+        # 4.1 Prepare pass-2 jobs
+        print("Preparing pass-2 jobs (4.1)...")
+        script_41 = os.path.abspath("workflow_scripts/4.1.prepare_second_pass.py")
+        cmd = ["python", script_41,
+               "--config", abs_config_path,
+               "--step3_dir", step3_dir,
+               "--step4_dir", step4_dir]
+        if override:
+            cmd.append("--override")
+        run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
 
-    # 4.2 Run pass-2 Boltz jobs
-    print("Running pass-2 Boltz jobs (4.2)...")
-    script_42 = os.path.abspath("workflow_scripts/4.2.run_second_pass.py")
-    cmd = ["python", script_42, "--step4_dir", step4_dir]
-    run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+        # 4.2 Run pass-2 Boltz jobs
+        print("Running pass-2 Boltz jobs (4.2)...")
+        script_42 = os.path.abspath("workflow_scripts/4.2.run_second_pass.py")
+        cmd = ["python", script_42, "--step4_dir", step4_dir]
+        run_command(cmd, env="boltz_analysis", cwd=step4_dir, log_file=log_file)
+    else:
+        print("Skipping Boltz predictions (--replot mode).")
 
     # 4.3 Merge + unified post-analysis
     print("Merging pass-1 + pass-2 and running post-analysis (4.3)...")
@@ -350,6 +355,8 @@ def main():
                              "Enabled by default; use --no-doublepass to skip.")
     parser.add_argument("--ref", default=None,
                         help="Reference PDB for RMSD calculation. Must have 3 chains (A, B, ligand).")
+    parser.add_argument("--replot", action="store_true",
+                        help="Skip Boltz predictions and only re-run post-analysis and plotting.")
     
     args = parser.parse_args()
     
@@ -425,7 +432,7 @@ def main():
     log_step4 = os.path.join(logs_dir, "step4_double_pass.log")
     
     # Step 1
-    if args.step == 0 or args.step == 1:
+    if not args.replot and (args.step == 0 or args.step == 1):
         target_pesto_pdb = step1_pesto(config, project_dir, input_dir, log_step1)
     else:
         # If skipping step 1, try to find the output
@@ -436,12 +443,12 @@ def main():
         else:
             base = target_pdb
         target_pesto_pdb = os.path.join(step1_dir, f"{base}_pesto.pdb")
-        
-        if not os.path.exists(target_pesto_pdb):
+
+        if not args.replot and not os.path.exists(target_pesto_pdb):
              print(f"Warning: {target_pesto_pdb} does not exist. Step 2 might fail.")
 
     # Step 2
-    if args.step == 0 or args.step == 2:
+    if not args.replot and (args.step == 0 or args.step == 2):
         haddock_run_dir = step2_haddock(config, target_pesto_pdb, project_dir, log_step2)
     else:
         step2_dir = os.path.join(project_dir, "step2_haddock")
@@ -449,15 +456,15 @@ def main():
         haddock_run_dir = os.path.join(step2_dir, os.path.basename(run_dir_name))
 
     # Step 3
-    if args.step == 0 or args.step == 3:
+    if args.replot or args.step == 0 or args.step == 3:
         # Use the config in input_dir for step 3 to ensure consistency
         step3_boltz(config, haddock_run_dir, config_dest, project_dir, log_step3,
-                    override=args.override, ref_pdb=abs_ref)
+                    override=args.override, ref_pdb=abs_ref, replot=args.replot)
 
     # Step 4 (double-pass refinement)
-    if args.step == 4 or (args.step == 0 and args.doublepass):
+    if args.step == 4 or (args.step == 0 and args.doublepass) or (args.replot and args.step == 0):
         step4_double_pass(config, config_dest, project_dir, log_step4,
-                          override=args.override, ref_pdb=abs_ref)
+                          override=args.override, ref_pdb=abs_ref, replot=args.replot)
 
 if __name__ == "__main__":
     main()

@@ -158,12 +158,13 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
         'chainpair_ipTM': coordinates["pair_chains_ipTM_avg"].values,
     })
     umap.plot.output_file(f"UMAP_ref_rmsd{name_suffix}.html")
+    cmap_rmsd_interactive = plt.cm.RdYlBu
     rmsd_plot = umap.plot.interactive(reducer, values=rmsd_clamped, hover_data=hover_rmsd,
-                                      cmap=cmap, background="white", point_size=5)
+                                      cmap=cmap_rmsd_interactive, background="white", point_size=5)
     umap.plot.show(rmsd_plot)
 
     # Static PNG (0-10 clamped)
-    cmap_rmsd = plt.cm.RdYlBu.reversed()
+    cmap_rmsd = plt.cm.RdYlBu
     fig, ax = plt.subplots(figsize=(7, 6))
     if p1_mask.any():
         ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
