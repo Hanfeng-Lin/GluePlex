@@ -52,6 +52,21 @@ plt.rcParams.update({
 })
 MARKER_SIZE = 36
 
+def _pass2_rank(c):
+    """Extract pass-2 rank from cluster label 'p2_topN'; returns 0 if not pass-2."""
+    if isinstance(c, str) and c.startswith("p2_top"):
+        try:
+            return int(c[6:])
+        except ValueError:
+            return 0
+    return 0
+
+# Plot order for pass-2 points: top10 → top1 so top1 stays on top
+_clusters_str_all = coordinates["cluster"].astype(str).values
+_p2_ranks = np.array([_pass2_rank(c) for c in _clusters_str_all])
+_p2_idx = np.where(p2_mask)[0]
+p2_order = _p2_idx[np.argsort(-_p2_ranks[_p2_idx])] if len(_p2_idx) else _p2_idx
+
 reducer = umap.UMAP(n_neighbors=10, metric="euclidean", min_dist=1, random_state=42)
 embedding = reducer.fit(coordinates_data)
 
@@ -72,7 +87,11 @@ embedding_xy = reducer.fit_transform(coordinates_data)
 
 # ── Cluster PNG with pass-aware edges ──
 fig, ax = plt.subplots(figsize=(7, 6))
-int_clusters = sorted(set(coordinates["cluster"].astype(str).values))
+all_clusters = sorted(set(coordinates["cluster"].astype(str).values))
+p1_clusters = [c for c in all_clusters if not c.startswith("p2_top")]
+p2_clusters = sorted([c for c in all_clusters if c.startswith("p2_top")],
+                     key=lambda c: -_pass2_rank(c))  # top10 first, top1 last
+int_clusters = p1_clusters + p2_clusters
 cmap_cat = matplotlib.colormaps.get_cmap("Spectral").resampled(len(int_clusters))
 cluster_color = {c: cmap_cat(i) for i, c in enumerate(int_clusters)}
 clusters_str = coordinates["cluster"].astype(str).values
@@ -114,9 +133,9 @@ def _scatter_continuous(values, label, outfile, title_suffix):
                    c=values[p1_mask], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
                    edgecolors="none")
     sc = None
-    if p2_mask.any():
-        sc = ax.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
-                        c=values[p2_mask], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
+    if len(p2_order):
+        sc = ax.scatter(embedding_xy[p2_order, 0], embedding_xy[p2_order, 1],
+                        c=values[p2_order], cmap=cmap, s=MARKER_SIZE, vmin=0, vmax=1.05,
                         edgecolors="black", linewidths=0.8)
     if sc is None:
         sc = ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
@@ -171,9 +190,9 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
                    c=rmsd_clamped[p1_mask], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
                    edgecolors="none")
     sc = None
-    if p2_mask.any():
-        sc = ax.scatter(embedding_xy[p2_mask, 0], embedding_xy[p2_mask, 1],
-                        c=rmsd_clamped[p2_mask], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
+    if len(p2_order):
+        sc = ax.scatter(embedding_xy[p2_order, 0], embedding_xy[p2_order, 1],
+                        c=rmsd_clamped[p2_order], cmap=cmap_rmsd, s=MARKER_SIZE, vmin=0, vmax=10,
                         edgecolors="black", linewidths=0.8)
     if sc is None:
         sc = ax.scatter(embedding_xy[p1_mask, 0], embedding_xy[p1_mask, 1],
