@@ -9,6 +9,30 @@ def load_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
+
+def validate_config(config):
+    """Sanity-check: residue range length must match sequence length for each protein."""
+    step3 = config.get('step3', {}) or {}
+    for chain, name_key, range_key, seq_key in (
+        ("A", "protein_a_name", "protein_a_residue_range", "protein_a_sequence"),
+        ("B", "protein_b_name", "protein_b_residue_range", "protein_b_sequence"),
+    ):
+        rng = step3.get(range_key)
+        seq = step3.get(seq_key)
+        if not (rng and seq):
+            continue
+        try:
+            start, end = (int(x) for x in rng.split("-"))
+        except ValueError:
+            print(f"Error: could not parse {range_key}='{rng}' (expected 'start-end').")
+            sys.exit(1)
+        expected = end - start + 1
+        if expected != len(seq):
+            print(f"Error: chain {chain} ({step3.get(name_key, '?')}) "
+                  f"residue range '{rng}' implies {expected} residues but "
+                  f"{seq_key} has length {len(seq)}.")
+            sys.exit(1)
+
 def run_command(cmd, env=None, cwd=None, log_file=None):
     """Runs a command in a specific conda environment and logs output."""
     command = []
@@ -266,6 +290,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
     protein_a = step3_config.get('protein_a_name', 'Target')
     protein_b = step3_config.get('protein_b_name', 'CRBN')
     ligand_name = step3_config.get('ligand_name', 'Ligand')
+    protein_a_range = step3_config.get('protein_a_residue_range', '')
     protein_b_range = step3_config.get('protein_b_residue_range', '')
 
     # Final results inside step3_dir
@@ -283,6 +308,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--ligand_name", ligand_name,
            "--protein_name", protein_b,
            "--protein_a_name", protein_a,
+           "--protein_a_residue_range", protein_a_range,
            "--protein_b_residue_range", protein_b_range,
            "--dim_reduction", "all"]
     if ref_pdb:
@@ -365,6 +391,7 @@ def main():
         sys.exit(1)
         
     config = load_config(args.config)
+    validate_config(config)
 
     # Validate reference PDB if provided
     abs_ref = None

@@ -60,6 +60,7 @@ def main():
     protein_a = step3_config.get("protein_a_name", "A")
     protein_b = step3_config.get("protein_b_name", "B")
     ligand_name = step3_config.get("ligand_name", "Ligand")
+    protein_a_range = step3_config.get("protein_a_residue_range", "")
     protein_b_range = step3_config.get("protein_b_residue_range", "")
 
     step3_dir = Path(args.step3_dir).resolve()
@@ -89,6 +90,7 @@ def main():
         "--ligand_name", ligand_name,
         "--protein_name", protein_b,
         "--protein_a_name", protein_a,
+        "--protein_a_residue_range", protein_a_range,
         "--protein_b_residue_range", protein_b_range,
         "--dim_reduction", args.dim_reduction,
     ]

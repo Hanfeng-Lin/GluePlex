@@ -9,22 +9,44 @@ import gemmi
 import argparse
 import sys
 
-def setup_results_dir(source_dir, results_dir):
-    """Collect PDB and JSON files into results directory."""
+def renumber_pdb(src, dst, chain_starts):
+    """Copy src→dst, renumbering polymer residues in given chains sequentially from start."""
+    st = gemmi.read_structure(src)
+    for model in st:
+        for chain in model:
+            if chain.name not in chain_starts:
+                continue
+            start = chain_starts[chain.name]
+            i = 0
+            for res in chain:
+                if res.entity_type in (gemmi.EntityType.Polymer, gemmi.EntityType.Unknown):
+                    res.seqid = gemmi.SeqId(start + i, " ")
+                    i += 1
+    st.write_pdb(dst)
+
+
+def setup_results_dir(source_dir, results_dir, chain_starts=None):
+    """Collect PDB and JSON files into results directory, optionally renumbering PDBs."""
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
-    
+
     print(f"Collecting files from {source_dir} to {results_dir}...")
-    
-    # Copy PDBs recursively
-    # Pattern: source_dir/**/predictions/**/*.pdb
+
+    # Copy PDBs recursively (renumber if chain_starts provided)
     pdb_files = glob.glob(os.path.join(source_dir, "**", "*.pdb"), recursive=True)
     if not pdb_files:
         print(f"Warning: No PDB files found in {source_dir}")
-    
+
     for pdb_file in pdb_files:
-        shutil.copy(pdb_file, results_dir)
-        
+        dst = os.path.join(results_dir, os.path.basename(pdb_file))
+        if chain_starts:
+            try:
+                renumber_pdb(pdb_file, dst, chain_starts)
+                continue
+            except Exception as e:
+                print(f"Warning: renumber failed for {pdb_file} ({e}); copying as-is.")
+        shutil.copy(pdb_file, dst)
+
     # Copy JSONs recursively
     json_files = glob.glob(os.path.join(source_dir, "**", "*.json"), recursive=True)
     if not json_files:
@@ -155,15 +177,26 @@ def main():
     parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand.")
     parser.add_argument("--protein_name", default="Protein", help="Name of the target protein (protein B).")
     parser.add_argument("--protein_a_name", default="", help="Name of the fixed protein (protein A, e.g. CRBN).")
-    parser.add_argument("--protein_b_residue_range", default="", help="Protein B residue range (e.g. '161-344') for output folder naming.")
+    parser.add_argument("--protein_b_residue_range", default="", help="Protein B residue range (e.g. '161-344') for output folder naming and PDB renumbering.")
+    parser.add_argument("--protein_a_residue_range", default="", help="Protein A residue range (e.g. '46-442') for PDB renumbering only; not used in folder naming.")
     parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
     parser.add_argument("--dim_reduction", default="all", choices=["umap", "pca", "all"],
                         help="Dimensionality reduction method: 'umap', 'pca', or 'all' (default).")
 
     args = parser.parse_args()
-    
-    # 1. Collect results
-    setup_results_dir(args.source_dir, args.results_dir)
+
+    # Renumbering: chain A and B start residues from configured ranges
+    chain_starts = {}
+    for chain_id, rng in (("A", args.protein_a_residue_range),
+                          ("B", args.protein_b_residue_range)):
+        if rng:
+            try:
+                chain_starts[chain_id] = int(rng.split("-")[0])
+            except (ValueError, IndexError):
+                print(f"Warning: could not parse residue range '{rng}' for chain {chain_id}")
+
+    # 1. Collect results (with renumbering)
+    setup_results_dir(args.source_dir, args.results_dir, chain_starts=chain_starts)
     
     # 2. Align and extract
     align_and_extract(args.results_dir, args.output_csv, args.align_chain, args.extract_chain)
@@ -265,7 +298,15 @@ def main():
             src = os.path.join(results_dir, r["file"])
             if os.path.exists(src):
                 new_name = f"top{rank}_{r['pair_chains_ipTM_avg']:.4f}_{r['file']}"
-                shutil.copy2(src, os.path.join(out_dir, new_name))
+                dst = os.path.join(out_dir, new_name)
+                if chain_starts:
+                    try:
+                        renumber_pdb(src, dst, chain_starts)
+                    except Exception as e:
+                        print(f"Warning: renumber failed for {src} ({e}); copying as-is.")
+                        shutil.copy2(src, dst)
+                else:
+                    shutil.copy2(src, dst)
             else:
                 print(f"Warning: top-10 PDB not found: {src}")
         for pattern in ("PCA_*.png", "PCA_*.html", "UMAP_*.png", "UMAP_*.html"):
