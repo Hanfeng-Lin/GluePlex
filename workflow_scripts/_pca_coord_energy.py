@@ -8,7 +8,7 @@ import pandas as pd
 import argparse
 
 from bokeh.plotting import figure, output_file, save
-from bokeh.models import ColumnDataSource, HoverTool, ColorBar, LinearColorMapper
+from bokeh.models import ColumnDataSource, HoverTool, ColorBar, LinearColorMapper, LabelSet
 from bokeh.transform import factor_cmap, linear_cmap
 from bokeh.palettes import Spectral11, RdYlBu11
 from matplotlib.colors import rgb2hex
@@ -70,6 +70,22 @@ edge_width = np.where(pass_vals == 2, 1.0, 0.0).astype(float)
 TOOLS = "pan,wheel_zoom,box_zoom,reset,save"
 POINT_SIZE = 7
 
+# Top-10 models by pair_chains_ipTM_avg (descending) for rank labels
+top10_idx = np.argsort(-chainp_vals)[:10]
+
+def _add_top10_labels(fig):
+    """Annotate top-10 points with rank numbers 1..10."""
+    label_source = ColumnDataSource(dict(
+        x=[float(embedding[i, 0]) for i in top10_idx],
+        y=[float(embedding[i, 1]) for i in top10_idx],
+        rank=[str(r) for r in range(1, len(top10_idx) + 1)],
+    ))
+    fig.add_layout(LabelSet(
+        x="x", y="y", text="rank", source=label_source,
+        x_offset=6, y_offset=6, text_font_size="11pt",
+        text_color="black", text_font_style="bold",
+    ))
+
 def _shared_source():
     return ColumnDataSource(dict(
         x=[float(v) for v in embedding[:, 0]],
@@ -115,6 +131,7 @@ p_cluster.add_tools(HoverTool(tooltips=[
 ]))
 p_cluster.legend.title = "Cluster"
 p_cluster.legend.click_policy = "hide"
+_add_top10_labels(p_cluster)
 
 output_file(f"PCA_cluster{name_suffix}.html")
 save(p_cluster)
@@ -149,6 +166,7 @@ p_iptm.add_tools(HoverTool(tooltips=[
 cbar_iptm = ColorBar(color_mapper=iptm_mapper, label_standoff=10, title="ipTM",
                      width=12, location=(0, 0))
 p_iptm.add_layout(cbar_iptm, "right")
+_add_top10_labels(p_iptm)
 
 output_file(f"PCA_ipTM{name_suffix}.html")
 save(p_iptm)
@@ -183,6 +201,7 @@ p_cp.add_tools(HoverTool(tooltips=[
 cbar_cp = ColorBar(color_mapper=cp_mapper, label_standoff=10,
                    title="chainpair_ipTM", width=12, location=(0, 0))
 p_cp.add_layout(cbar_cp, "right")
+_add_top10_labels(p_cp)
 
 output_file(f"PCA_chainpair_ipTM{name_suffix}.html")
 save(p_cp)
@@ -324,6 +343,7 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
     cbar_rmsd = ColorBar(color_mapper=rmsd_mapper, label_standoff=10,
                          title="ref_rmsd (Å)", width=12, location=(0, 0))
     p_rmsd.add_layout(cbar_rmsd, "right")
+    _add_top10_labels(p_rmsd)
     output_file(f"PCA_ref_rmsd{name_suffix}.html")
     save(p_rmsd)
     print(f"Saved PCA_ref_rmsd{name_suffix}.html")

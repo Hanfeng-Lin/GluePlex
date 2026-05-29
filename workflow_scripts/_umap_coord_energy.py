@@ -9,6 +9,7 @@ import pandas as pd
 import umap.plot
 import argparse
 import sys
+from bokeh.models import ColumnDataSource, LabelSet
 
 parser = argparse.ArgumentParser(description="UMAP visualization.")
 parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand for plot titles.")
@@ -69,6 +70,24 @@ p2_order = _p2_idx[np.argsort(-_p2_ranks[_p2_idx])] if len(_p2_idx) else _p2_idx
 
 reducer = umap.UMAP(n_neighbors=10, metric="euclidean", min_dist=1, random_state=42)
 embedding = reducer.fit(coordinates_data)
+embedding_xy = reducer.fit_transform(coordinates_data)
+
+# Top-10 models by pair_chains_ipTM_avg (descending) for rank labels
+_chainp_vals = coordinates["pair_chains_ipTM_avg"].values
+top10_idx = np.argsort(-_chainp_vals)[:10]
+
+def _add_top10_labels(fig):
+    """Annotate top-10 points with rank numbers 1..10 on a Bokeh figure."""
+    label_source = ColumnDataSource(dict(
+        x=[float(embedding_xy[i, 0]) for i in top10_idx],
+        y=[float(embedding_xy[i, 1]) for i in top10_idx],
+        rank=[str(r) for r in range(1, len(top10_idx) + 1)],
+    ))
+    fig.add_layout(LabelSet(
+        x="x", y="y", text="rank", source=label_source,
+        x_offset=6, y_offset=6, text_font_size="11pt",
+        text_color="black", text_font_style="bold",
+    ))
 
 hover_data = pd.DataFrame({'conformation': coordinates["file"].values,
                            'cluster': coordinates["cluster"].values,
@@ -81,9 +100,8 @@ hover_data = pd.DataFrame({'conformation': coordinates["file"].values,
 umap.plot.output_file(f"UMAP_cluster{name_suffix}.html")
 cluster_plot = umap.plot.interactive(embedding, labels=coordinates["cluster"], hover_data=hover_data,
                           color_key_cmap="Spectral", background="white", point_size=5)
+_add_top10_labels(cluster_plot)
 umap.plot.show(cluster_plot)
-
-embedding_xy = reducer.fit_transform(coordinates_data)
 
 # ── Cluster PNG with pass-aware edges ──
 fig, ax = plt.subplots(figsize=(7, 6))
@@ -124,6 +142,7 @@ cmap = plt.cm.RdYlBu.reversed()
 umap.plot.output_file(f"UMAP_ipTM{name_suffix}.html")
 ipTM_plot = umap.plot.interactive(embedding, values=coordinates["ipTM"].values, hover_data=hover_data,
                           cmap=cmap, background="white", point_size=5)
+_add_top10_labels(ipTM_plot)
 umap.plot.show(ipTM_plot)
 
 def _scatter_continuous(values, label, outfile, title_suffix):
@@ -158,6 +177,7 @@ _scatter_continuous(coordinates["ipTM"].values, "ipTM", f"UMAP_ipTM{name_suffix}
 umap.plot.output_file(f"UMAP_chainpair_ipTM{name_suffix}.html")
 chainpair_ipTM_plot = umap.plot.interactive(reducer, values=coordinates["pair_chains_ipTM_avg"].values, hover_data=hover_data,
                           cmap=cmap, background="white", point_size=5)
+_add_top10_labels(chainpair_ipTM_plot)
 umap.plot.show(chainpair_ipTM_plot)
 
 _scatter_continuous(coordinates["pair_chains_ipTM_avg"].values, "chainpair_ipTM",
@@ -180,6 +200,7 @@ if "ref_rmsd" in coordinates.columns and coordinates["ref_rmsd"].notna().any():
     cmap_rmsd_interactive = plt.cm.RdYlBu
     rmsd_plot = umap.plot.interactive(reducer, values=rmsd_clamped, hover_data=hover_rmsd,
                                       cmap=cmap_rmsd_interactive, background="white", point_size=5)
+    _add_top10_labels(rmsd_plot)
     umap.plot.show(rmsd_plot)
 
     # Static PNG (0-10 clamped)

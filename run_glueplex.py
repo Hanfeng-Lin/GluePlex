@@ -265,17 +265,16 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
     step3_config = config.get('step3', {})
     protein_a = step3_config.get('protein_a_name', 'Target')
     protein_b = step3_config.get('protein_b_name', 'CRBN')
-    
-    # Read ligand name
     ligand_name = step3_config.get('ligand_name', 'Ligand')
-    
+    protein_b_range = step3_config.get('protein_b_residue_range', '')
+
     # Final results inside step3_dir
     final_results_dir = os.path.join(step3_dir, f"{protein_a}-{protein_b}")
-    
+
     print(f"Final results will be saved to: {final_results_dir}")
-    
+
     script_path_32 = os.path.abspath("workflow_scripts/3.2.post_analysis.py")
-    
+
     cmd = ["python", script_path_32,
            "--source_dir", output_dir,
            "--results_dir", final_results_dir,
@@ -284,6 +283,7 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--ligand_name", ligand_name,
            "--protein_name", protein_b,
            "--protein_a_name", protein_a,
+           "--protein_b_residue_range", protein_b_range,
            "--dim_reduction", "all"]
     if ref_pdb:
         cmd.extend(["--ref_pdb", ref_pdb])
@@ -391,12 +391,14 @@ def main():
     a_name = step3_cfg.get('protein_a_name')
     b_name = step3_cfg.get('protein_b_name')
     lig_name = step3_cfg.get('ligand_name')
+    b_range = step3_cfg.get('protein_b_residue_range')
     if a_name and b_name:
-        # Convention on disk: target (b) first, then E3 (a), then ligand
+        # Convention on disk: target (b) [+ residue range] first, then E3 (a), then ligand
+        b_tag = f"{b_name}_{b_range}" if b_range else b_name
         if lig_name:
-            project_name = f"Result_{b_name}_{a_name}_{lig_name}_GluePlex2pass"
+            project_name = f"Result_{b_tag}_{a_name}_{lig_name}_GluePlex2pass"
         else:
-            project_name = f"Result_{b_name}_{a_name}_GluePlex2pass"
+            project_name = f"Result_{b_tag}_{a_name}_GluePlex2pass"
     else:
         project_name = config.get('project_name', 'GluePlex_Project')
     base_dir = config.get('base_dir', os.getcwd())

@@ -155,6 +155,7 @@ def main():
     parser.add_argument("--ligand_name", default="Ligand", help="Name of the ligand.")
     parser.add_argument("--protein_name", default="Protein", help="Name of the target protein (protein B).")
     parser.add_argument("--protein_a_name", default="", help="Name of the fixed protein (protein A, e.g. CRBN).")
+    parser.add_argument("--protein_b_residue_range", default="", help="Protein B residue range (e.g. '161-344') for output folder naming.")
     parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
     parser.add_argument("--dim_reduction", default="all", choices=["umap", "pca", "all"],
                         help="Dimensionality reduction method: 'umap', 'pca', or 'all' (default).")
@@ -232,7 +233,62 @@ def main():
                 print(f"Error running {method.upper()} script: {e}")
         else:
             print(f"Warning: {method.upper()} script not found at {vis_script}")
-    
+
+    # 4. Package top-10 PDBs + plots into <project>/step{3,4}_top10_output/
+    import shutil, glob
+    step_dir = os.path.abspath(os.path.dirname(args.output_csv) or ".")
+    step_basename = os.path.basename(step_dir)
+    project_dir = os.path.dirname(step_dir)
+
+    # Prefix used for output folder names: protein_a, protein_b (+ residue range), ligand
+    b_tag = f"{args.protein_name}_{args.protein_b_residue_range}" if (args.protein_name and args.protein_b_residue_range) else args.protein_name
+    name_parts = [p for p in (args.protein_a_name, b_tag, args.ligand_name) if p]
+    out_prefix = ("_".join(name_parts) + "_") if name_parts else ""
+
+    def _package_step(step_dir, results_dir, top10_log, top10_df):
+        """Copy top-10 PDBs + plots from step_dir into <project>/{prefix}step{N}_top10_output/."""
+        base = os.path.basename(step_dir)
+        if not (base.startswith("step") and len(base) > 4 and base[4].isdigit()):
+            return
+        n = base[4]
+        out_dir = os.path.join(os.path.dirname(step_dir), f"{out_prefix}step{n}_top10_output")
+        # Clean stale PDBs/plots/log from previous runs
+        if os.path.isdir(out_dir):
+            for pattern in ("*.pdb", "PCA_*.png", "PCA_*.html", "UMAP_*.png",
+                            "UMAP_*.html", "top10_models.log"):
+                for f in glob.glob(os.path.join(out_dir, pattern)):
+                    os.remove(f)
+        os.makedirs(out_dir, exist_ok=True)
+        if top10_log and os.path.exists(top10_log):
+            shutil.copy2(top10_log, out_dir)
+        for rank, (_, r) in enumerate(top10_df.iterrows(), 1):
+            src = os.path.join(results_dir, r["file"])
+            if os.path.exists(src):
+                new_name = f"top{rank}_{r['pair_chains_ipTM_avg']:.4f}_{r['file']}"
+                shutil.copy2(src, os.path.join(out_dir, new_name))
+            else:
+                print(f"Warning: top-10 PDB not found: {src}")
+        for pattern in ("PCA_*.png", "PCA_*.html", "UMAP_*.png", "UMAP_*.html"):
+            for f in glob.glob(os.path.join(step_dir, pattern)):
+                shutil.copy2(f, out_dir)
+        print(f"Top-10 output packaged at {out_dir}")
+
+    # Always package the current step
+    _package_step(step_dir, args.results_dir, log_path, _df_sorted)
+
+    # When running step 4, also (re-)package step 3 from its existing files
+    if step_basename == "step4_boltz" and project_dir:
+        step3_dir = os.path.join(project_dir, "step3_boltz")
+        step3_csv = os.path.join(step3_dir, "atom.csv")
+        step3_results = os.path.join(step3_dir, f"{args.protein_a_name}-{args.protein_name}")
+        if os.path.exists(step3_csv) and os.path.isdir(step3_results):
+            _df3 = _pd.read_csv(step3_csv)
+            _df3_sorted = _df3.sort_values("pair_chains_ipTM_avg", ascending=False).head(10)
+            step3_log = os.path.join(step3_dir, "top10_models.log")
+            _package_step(step3_dir, step3_results, step3_log, _df3_sorted)
+        else:
+            print(f"Note: step3 data not found at {step3_dir}; skipping step3 packaging.")
+
     print("Post-analysis complete.")
 
 if __name__ == "__main__":
