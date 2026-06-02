@@ -6,11 +6,46 @@ The `GluePlex_doublepass` branch adds a **Step 4** that re-runs Boltz2 using the
 
 ## Overview
 
-The pipeline consists of four steps:
-1.  **Step 1: PeSTo** — Predicts active residues and interfaces on the target protein.
-2.  **Step 2: HADDOCK3** — Performs data-driven docking using the predicted interfaces to generate initial models.
-3.  **Step 3: Boltz2 (Pass 1)** — Refines the HADDOCK3 models and scores them using ipTM confidence metrics, followed by PCA/UMAP visualization.
-4.  **Step 4: Boltz2 (Pass 2)** — Selects the top-N models from Pass 1 (ranked by `pair_chains_ipTM_avg`), converts them to mmCIF templates, re-runs Boltz2 with multi-chain templating, then merges both passes for unified post-analysis and visualization.
+The pipeline consists of four steps, each orchestrated by `run_glueplex.py` and implemented by numbered scripts in `workflow_scripts/`:
+
+1.  **Step 1: PeSTo** — Predicts interface residues on the target protein.
+2.  **Step 2: HADDOCK3** — Data-driven docking using the predicted interface to generate initial ternary models.
+3.  **Step 3: Boltz2 (Pass 1)** — Re-predicts each HADDOCK cluster with Boltz2, scores by ipTM, and visualizes with PCA/UMAP.
+4.  **Step 4: Boltz2 (Pass 2)** — Re-runs Boltz2 using the top-N Pass-1 models as multi-chain templates, then merges both passes for unified analysis.
+
+The sections below detail what each step actually does internally.
+
+### Step 1 — PeSTo interface prediction
+
+*Script: `tools/PeSTo/apply_model.py` (run via the orchestrator)*
+
+- Accepts `target_pdb` as either a local PDB file or a PDB ID (e.g. `1E9H_A`, with optional chain selection). Files are copied into `input/`; IDs are fetched on the fly.
+- Runs the **PeSTo** deep-learning model (PyTorch) to score every residue for the probability of being part of a protein–protein interface.
+- Writes the per-residue interface probability into the **B-factor column** of `step1_pesto/{base}_pesto.pdb`. This annotated PDB feeds Step 2.
+
+### Step 2 — HADDOCK3 docking
+
+Three sub-steps, all run in the `haddock3` environment:
+
+- **2.0 `fetch_active_res.py`** — Derives the target's active (interface) residues when `target_active_res` is not set in the config. It runs **NACCESS** to compute relative solvent accessibility (keeping residues >15% exposed), parses the PeSTo B-factors (keeping CA atoms with score ≥ 0.3), and takes the **intersection** (interface ∧ surface-exposed). It falls back to PeSTo-only or SASA-only if the intersection is empty, and prints the residues as a comma-separated list.
+- **2.1 `generate_actpass.py`** — Builds HADDOCK3 ambiguous interaction restraints (`restraint.tbl`). The fixed partner (CRBN) uses hardcoded active residues `105,332,341`; the target uses the residues from 2.0. For each partner it derives passive residues via `haddock3-restraints passive_from_active`, then combines both into ambiguous restraints with `active_passive_to_ambig`.
+- **2.2 `run_haddock_workflow.py`** — Normalizes chain IDs (fixed partner → chain A, target → chain B), generates a HADDOCK3 config, and runs `haddock3` in MPI mode (`ncores` from config). The docking protocol is: `topoaa` → `rigidbody` (sampling 1000) → `seletop` (top 200) → `flexref` → `mdref` → `clustfcc` → `seletopclusts` (top 4 models/cluster), with `caprieval` evaluation after each refinement stage.
+- **2.3 `export_mmcif.py`** — Locates the `*_seletopclusts` directory, takes the top model of each cluster (`cluster_*model_1.pdb.gz`), and converts each to **mmCIF** with ChimeraX (`bestGuess true`) so Boltz2 can use them as templates.
+
+### Step 3 — Boltz2 Pass 1
+
+Two sub-steps, run in the `boltz_analysis` environment:
+
+- **3.1 `run_batch_clusters.py`** — For each cluster mmCIF from Step 2, generates a Boltz2 input YAML (chain A = protein A sequence, chain B = protein B sequence, ligand C = SMILES, `msa: empty`, and a **multi-chain template** spanning chains A+B) plus a wrapper run script, then runs `boltz predict` with `diffusion_samples` samples. CIFs are distributed round-robin across the configured GPUs via a thread pool (one prediction per GPU at a time).
+- **3.2 `post_analysis.py`** — Flattens all predicted PDBs/JSONs into `{protein_a}-{protein_b}/`, renumbers residues to match the configured ranges, then **superposes every model on chain A** (gemmi) and extracts chain B CA coordinates. It reads `ipTM` and `pair_chains_iptm` from the Boltz confidence JSONs into `atom.csv`, optionally computes reference RMSD (see `--ref`), writes `top10_models.log`, runs **PCA and UMAP** visualizations (interactive Bokeh HTML + static PNG), and packages the top-10 PDBs + plots into a `step3_top10_output/` folder.
+
+### Step 4 — Boltz2 Pass 2 (double-pass refinement)
+
+Three sub-steps, run in the `boltz_analysis` environment:
+
+- **4.1 `prepare_second_pass.py`** — Reads Step 3's `atom.csv`, sorts the Pass-1 rows by `rank_metric` (default `pair_chains_ipTM_avg`), and selects the top-N. Each selected PDB is converted to mmCIF via ChimeraX (Boltz's PDB template parser fails on bare-ATOM PDBs without SEQRES), and a per-template Boltz YAML + wrapper script is written into `step4_boltz/`. Emits `pass2_manifest.txt` and `pass2_template_mapping.log` (source → renamed template). Does not run Boltz itself.
+- **4.2 `run_second_pass.py`** — Reads the manifest and launches every pass-2 Boltz job in parallel, with concurrency bounded by the number of unique GPUs the jobs target.
+- **4.3 `merge_and_analyze.py`** — Symlinks all Pass-1 and Pass-2 PDBs/JSONs into `merged_pdbs/`, then re-runs `3.2.post_analysis.py` on the merged set to produce `atom_2ndpass.csv` and combined PCA/UMAP plots (Pass-2 points are visually distinguished — see [Analysis](#analysis)).
 
 ## Prerequisites
 

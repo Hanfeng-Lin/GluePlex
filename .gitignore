@@ -1,8 +1,8 @@
 # Result directories
 Result_*/
 
-# Test/scratch template folding dirs
-test_*_template_folding/
+# Test/scratch dirs
+test_*/
 
 # Target-specific configs and PDBs (project-specific inputs)
 project_config_*.yaml
