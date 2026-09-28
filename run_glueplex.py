@@ -314,6 +314,9 @@ def step3_boltz(config, haddock_run_dir, config_path, project_dir, log_file, ove
            "--dim_reduction", "all"]
     if ref_pdb:
         cmd.extend(["--ref_pdb", ref_pdb])
+        ref_align_range = config.get('ref_align_range')
+        if ref_align_range:
+            cmd.extend(["--align_range", str(ref_align_range)])
     run_command(cmd, env="boltz_analysis", cwd=step3_dir, log_file=log_file)
 
     print("Step 3 Complete.")

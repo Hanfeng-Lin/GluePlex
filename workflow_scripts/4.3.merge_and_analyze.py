@@ -96,6 +96,11 @@ def main():
     ]
     if args.ref_pdb:
         cmd.extend(["--ref_pdb", args.ref_pdb])
+        # Multi-domain receptors (e.g. CRBN's Lon/CULT hinge) need the superposition
+        # restricted to the binding domain, or domain motion inflates the interface RMSD.
+        ref_align_range = full_config.get("ref_align_range")
+        if ref_align_range:
+            cmd.extend(["--align_range", str(ref_align_range)])
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True, cwd=str(step4_dir))
     print(f"Combined post-analysis complete. See {step4_dir / args.output_csv}")

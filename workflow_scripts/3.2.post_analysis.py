@@ -180,6 +180,12 @@ def main():
     parser.add_argument("--protein_b_residue_range", default="", help="Protein B residue range (e.g. '161-344') for output folder naming and PDB renumbering.")
     parser.add_argument("--protein_a_residue_range", default="", help="Protein A residue range (e.g. '46-442') for PDB renumbering only; not used in folder naming.")
     parser.add_argument("--ref_pdb", default=None, help="Reference PDB for RMSD calculation.")
+    parser.add_argument("--align_range", default=None,
+                        help="Inclusive residue range of the align chain to superpose on for "
+                             "ref RMSD, e.g. '319-425' for CRBN's CULT (thalidomide-binding) "
+                             "domain. Default: whole chain. Set this for multi-domain, "
+                             "hinged receptors, where whole-chain superposition lets domain "
+                             "motion displace the interface by tens of angstroms.")
     parser.add_argument("--dim_reduction", default="all", choices=["umap", "pca", "all"],
                         help="Dimensionality reduction method: 'umap', 'pca', or 'all' (default).")
 
@@ -213,6 +219,8 @@ def main():
                    "--results_dir", args.results_dir,
                    "--align_chain", args.align_chain,
                    "--extract_chain", args.extract_chain]
+            if args.align_range:
+                cmd += ["--align_range", args.align_range]
             try:
                 subprocess.run(cmd, check=True)
             except subprocess.CalledProcessError as e:

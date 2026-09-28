@@ -16,14 +16,27 @@ from Bio.Align import PairwiseAligner
 from Bio.Data.IUPACData import protein_letters_3to1
 
 
-def _get_ca_atoms(structure, chain_id):
+def _get_ca_atoms(structure, chain_id, res_range=None):
+    """CA atoms of a chain, optionally restricted to an inclusive residue range.
+
+    Restricting matters for multi-domain receptors: CRBN has a large open/closed
+    hinge between its N-terminal Lon domain and the C-terminal CULT
+    (thalidomide-binding) domain. Superposing on the whole chain lets that hinge
+    motion displace the binding site by >20 A even when two crystals agree on the
+    ternary geometry to ~2 A, which silently turns correct predictions into
+    apparent failures.
+    """
+    lo, hi = (res_range if res_range else (None, None))
     atoms, seq = [], []
     for res in structure[0][chain_id].get_residues():
-        if res.get_id()[0] == " ":
-            ca = res.child_dict.get("CA")
-            if ca:
-                atoms.append(ca)
-                seq.append(protein_letters_3to1.get(res.get_resname().title(), "X"))
+        if res.get_id()[0] != " ":
+            continue
+        if lo is not None and not (lo <= res.get_id()[1] <= hi):
+            continue
+        ca = res.child_dict.get("CA")
+        if ca:
+            atoms.append(ca)
+            seq.append(protein_letters_3to1.get(res.get_resname().title(), "X"))
     return atoms, "".join(seq)
 
 
@@ -51,13 +64,13 @@ def _pair_by_sequence(atoms1, seq1, atoms2, seq2):
 def compute_ref_rmsd(pdb_path, bp_parser,
                      ref_A_atoms, ref_A_seq,
                      ref_B_atoms, ref_B_seq,
-                     align_chain, extract_chain):
+                     align_chain, extract_chain, align_range=None):
     try:
         mod = bp_parser.get_structure("mod", pdb_path)
     except Exception:
         return float("nan")
 
-    mod_A, mod_seq_A = _get_ca_atoms(mod, align_chain)
+    mod_A, mod_seq_A = _get_ca_atoms(mod, align_chain, align_range)
     p_ref_A, p_mod_A = _pair_by_sequence(ref_A_atoms, ref_A_seq, mod_A, mod_seq_A)
     if len(p_ref_A) < 10:
         return float("nan")
@@ -84,14 +97,23 @@ def main():
                         help="Directory containing model PDB files referenced in the CSV.")
     parser.add_argument("--align_chain", default="A")
     parser.add_argument("--extract_chain", default="B")
+    parser.add_argument("--align_range", default=None,
+                        help="Inclusive residue range of the align chain to superpose on, "
+                             "e.g. '319-425' for CRBN's CULT domain. Default: whole chain. "
+                             "Use this when the receptor is multi-domain and flexible.")
     args = parser.parse_args()
+    align_range = None
+    if args.align_range:
+        lo, hi = (int(x) for x in args.align_range.split("-"))
+        align_range = (lo, hi)
 
     bp_parser = PDBParser(QUIET=True)
     ref_st = bp_parser.get_structure("ref", args.ref_pdb)
-    ref_A_atoms, ref_A_seq = _get_ca_atoms(ref_st, args.align_chain)
+    ref_A_atoms, ref_A_seq = _get_ca_atoms(ref_st, args.align_chain, align_range)
     ref_B_atoms, ref_B_seq = _get_ca_atoms(ref_st, args.extract_chain)
     print(f"Reference: {args.ref_pdb}")
-    print(f"  Chain {args.align_chain}: {len(ref_A_atoms)} CAs")
+    print(f"  Chain {args.align_chain}: {len(ref_A_atoms)} CAs"
+          + (f" (restricted to {args.align_range})" if args.align_range else ""))
     print(f"  Chain {args.extract_chain}: {len(ref_B_atoms)} CAs")
 
     df = pd.read_csv(args.input_csv)
@@ -105,7 +127,7 @@ def main():
             pdb_path, bp_parser,
             ref_A_atoms, ref_A_seq,
             ref_B_atoms, ref_B_seq,
-            args.align_chain, args.extract_chain,
+            args.align_chain, args.extract_chain, align_range,
         )
         rmsds.append(rmsd)
 
