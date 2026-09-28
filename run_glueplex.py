@@ -226,7 +226,8 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
            "--target_pdb", abs_target_pesto_pdb,
            "--restraint", restraint_file,
            "--run_dir", run_dir,
-           "--ncores", str(ncores)]
+           "--ncores", str(ncores),
+           "--mode", config.get('haddock_mode', 'mpi')]
            
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file)
     

@@ -26,3 +26,6 @@ __pycache__/
 .vscode/
 .idea/
 .claude/
+
+# CRBN neosubstrate benchmark (large: structures, Boltz outputs, plots)
+crbn_benchmark/

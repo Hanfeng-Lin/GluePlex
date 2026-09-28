@@ -33,7 +33,7 @@ def renumber_chain(input_pdb, output_pdb, new_chain_id):
             else:
                 fout.write(line)
 
-def generate_config(pdb1_path, pdb2_path, restraint_path, run_dir, ncores, output_config):
+def generate_config(pdb1_path, pdb2_path, restraint_path, run_dir, ncores, output_config, mode="mpi"):
     """Generates the HADDOCK3 configuration file."""
     config_content = f"""# ====================================================================
 # Protein-protein docking example with NMR-derived ambiguous interaction restraints
@@ -41,9 +41,10 @@ def generate_config(pdb1_path, pdb2_path, restraint_path, run_dir, ncores, outpu
 # directory in which the scoring will be done
 run_dir = "{run_dir}"
 
-# execution mode 
-mode = "mpi"
-#  2 nodes x 96 tasks = ncores = 192
+# execution mode
+mode = "{mode}"
+#  mpi: multi-node (2 nodes x 96 tasks = ncores = 192)
+#  local: single node, multiprocessing with `ncores` workers
 ncores = {ncores}
 
 debug = true
@@ -109,6 +110,9 @@ def main():
     parser.add_argument("--run_dir", default="run1-mdref-full", help="HADDOCK3 run directory.")
     parser.add_argument("--config", default="docking.cfg", help="Output configuration filename.")
     parser.add_argument("--ncores", type=int, default=48, help="Number of cores to use.")
+    parser.add_argument("--mode", default="mpi", choices=["mpi", "local"],
+                        help="HADDOCK3 execution mode. 'local' uses multiprocessing on one "
+                             "node and avoids the CUDA-enabled OpenMPI stack.")
     
     args = parser.parse_args()
     
@@ -145,7 +149,7 @@ def main():
         renumber_chain(pdb2, final_pdb2, 'B')
     
     # 2. Generate Configuration
-    generate_config(final_pdb1, final_pdb2, args.restraint, args.run_dir, args.ncores, args.config)
+    generate_config(final_pdb1, final_pdb2, args.restraint, args.run_dir, args.ncores, args.config, args.mode)
     
     # 3. Run HADDOCK3
     if os.path.exists(args.run_dir):
