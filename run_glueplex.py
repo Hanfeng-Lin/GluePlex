@@ -134,6 +134,44 @@ def step1_pesto(config, project_dir, input_dir, log_file):
         print(f"Error: Expected output {output_pdb} not found.")
         sys.exit(1)
         
+    # Optional: merge PeSTo predictions from further structures of the same target.
+    # Off unless `pesto_extra_pdbs` is set, so existing configs behave identically.
+    extra = config.get('pesto_extra_pdbs') or []
+    if extra:
+        strategy = config.get('pesto_aggregate', 'union')
+        thr = config.get('pesto_threshold', 0.3)
+        extra_dir = os.path.join(step1_dir, "extra")
+        os.makedirs(extra_dir, exist_ok=True)
+        pairs = []
+        for xp in extra:
+            if not os.path.exists(xp):
+                print(f"Warning: pesto_extra_pdbs entry not found, skipping: {xp}")
+                continue
+            xb = os.path.splitext(os.path.basename(xp))[0]
+            xout = os.path.join(extra_dir, f"{xb}_pesto.pdb")
+            if not os.path.exists(xout):
+                run_command(["python", script_path, "--pdb_file", os.path.abspath(xp),
+                             "--output", extra_dir],
+                            env="pesto", cwd=input_dir, log_file=log_file)
+            if os.path.exists(xout):
+                pairs.append(f"{xout}:{os.path.abspath(xp)}")
+            else:
+                print(f"Warning: no PeSTo output for {xp}")
+        if pairs:
+            merged = os.path.join(step1_dir, f"{base}_pesto_aggregated.pdb")
+            run_command(["python", os.path.abspath("workflow_scripts/1.2.aggregate_pesto.py"),
+                         "--primary_pesto", output_pdb,
+                         "--primary_input", os.path.abspath(dest_pdb if os.path.exists(target_pdb) else target_pdb),
+                         "--extra", *pairs,
+                         "--strategy", str(strategy),
+                         "--threshold", str(thr),
+                         "--out", merged],
+                        env="boltz_analysis", cwd=os.getcwd(), log_file=log_file)
+            if os.path.exists(merged):
+                output_pdb = merged
+                print(f"Step 1: using aggregated actives from {len(pairs)+1} structures "
+                      f"(strategy={strategy})")
+
     print(f"Step 1 Complete. Output: {output_pdb}")
     return output_pdb
 
