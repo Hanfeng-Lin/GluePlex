@@ -205,6 +205,9 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
     cmd = ["python", script_path,
            "--target_pdb", abs_target_pesto_pdb,
            "--target_res", active_res]
+    crbn_res = config.get('crbn_active_res')
+    if crbn_res:
+        cmd.extend(["--crbn_res", str(crbn_res)])
     cmd.extend(["--output", restraint_file])
 
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file)
