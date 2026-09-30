@@ -5,6 +5,7 @@ import argparse
 import urllib.request
 import torch as pt
 from tqdm import tqdm
+import re
 from glob import glob
 
 # Determine the directory of the script
@@ -123,7 +124,12 @@ def process_data(data_path, model, device, output_path=None):
         else:
             pdb_filepaths = [data_path]
 
-    pdb_filepaths = [fp for fp in pdb_filepaths if "_i" not in fp]
+    # Skip PeSTo's own per-interface outputs (..._i1.pdb, _i2.pdb, ...). Match the
+    # BASENAME with an explicit pattern: testing `"_i" not in fp` against the whole
+    # path silently discards every input whose *directory* happens to contain "_i"
+    # (e.g. an output folder named "runs_improve"), leaving "No PDB files found".
+    pdb_filepaths = [fp for fp in pdb_filepaths
+                     if not re.search(r"_i\d+\.pdb$", os.path.basename(fp))]
     
     if not pdb_filepaths:
         print(f"No PDB files found to process.")
