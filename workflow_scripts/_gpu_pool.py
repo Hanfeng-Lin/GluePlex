@@ -16,6 +16,8 @@ Replaces static round-robin (`gpus[i % len(gpus)]`), which had two problems:
 `acquire()` blocks until a device is free both in this pool and on the card
 itself (checked with nvidia-smi), so concurrent pipelines interleave correctly.
 """
+import errno
+import fcntl
 import os
 import queue
 import subprocess
@@ -24,6 +26,46 @@ import time
 
 DEFAULT_FREE_MB = 4000          # a card with less than this in use counts as free
 POLL_SECONDS = 15
+LOCK_DIR = os.environ.get("GLUEPLEX_GPU_LOCK_DIR", "/tmp/glueplex_gpu_locks")
+
+
+class _GpuLock:
+    """Exclusive, cross-process claim on one device, via flock.
+
+    An in-process queue plus an nvidia-smi check is not enough: two pipelines
+    started in the same second each pop device 0 from their own queue, both see
+    it idle, and both take it -- the check and the claim are not atomic. The
+    lock makes them atomic, and it is released automatically if a process dies
+    because flock is tied to the file descriptor.
+    """
+
+    def __init__(self, gpu):
+        self.gpu = int(gpu)
+        os.makedirs(LOCK_DIR, exist_ok=True)
+        self.path = os.path.join(LOCK_DIR, f"gpu{self.gpu}.lock")
+        self.fh = None
+
+    def acquire(self):
+        fh = open(self.path, "w")
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            fh.close()
+            if e.errno in (errno.EACCES, errno.EAGAIN):
+                return False
+            raise
+        fh.write(f"{os.getpid()}\n")
+        fh.flush()
+        self.fh = fh
+        return True
+
+    def release(self):
+        if self.fh is not None:
+            try:
+                fcntl.flock(self.fh, fcntl.LOCK_UN)
+            finally:
+                self.fh.close()
+                self.fh = None
 
 
 def gpu_memory_used(samples=3, gap=1.5):
@@ -67,24 +109,39 @@ class GPUPool:
         for g in gpus:
             self._q.put(int(g))
         self._lock = threading.Lock()
+        self._held = {}
 
     def acquire(self, timeout=None):
-        """Block until a device is free in the pool AND quiet on the card."""
+        """Block until a device is free in this pool and claimable machine-wide."""
         deadline = None if timeout is None else time.time() + timeout
         while True:
             g = self._q.get() if deadline is None else self._q.get(
                 timeout=max(0.1, deadline - time.time()))
-            if not self.check_external:
-                return g
-            used = gpu_memory_used()
-            if not used or used.get(g, 0) < self.free_mb:
-                return g
-            # someone else is on this card: put it back and try another
-            self._q.put(g)
-            time.sleep(POLL_SECONDS)
+            lock = _GpuLock(g)
+            if not lock.acquire():
+                # held by another pipeline on this host
+                self._q.put(g)
+                time.sleep(POLL_SECONDS)
+                continue
+            if self.check_external:
+                used = gpu_memory_used()
+                if used and used.get(g, 0) >= self.free_mb:
+                    # busy with something that is not using these locks
+                    lock.release()
+                    self._q.put(g)
+                    time.sleep(POLL_SECONDS)
+                    continue
+            with self._lock:
+                self._held[g] = lock
+            return g
 
     def release(self, g):
-        self._q.put(int(g))
+        g = int(g)
+        with self._lock:
+            lock = self._held.pop(g, None)
+        if lock is not None:
+            lock.release()
+        self._q.put(g)
 
     def run(self, cmd, gpu, **kw):
         """subprocess.run with CUDA_VISIBLE_DEVICES set for the CHILD only."""
