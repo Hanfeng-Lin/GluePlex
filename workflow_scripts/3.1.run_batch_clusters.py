@@ -6,6 +6,8 @@ import yaml
 import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _gpu_pool import GPUPool, slot
 
 # Template for the run script
 SCRIPT_TEMPLATE = """import os
@@ -34,7 +36,9 @@ templates:
 \"\"\"
 
 def main(yaml_file, out_dir, output_format="pdb", diffusion_samples={diffusion_samples}, gpu_id=0, override=False):
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    # the launcher may pin the device through the environment; only fall back
+    # to the value baked in at generation time if it did not
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", str(gpu_id))
     with open(yaml_file, "w") as f:
         f.write(YAML_CONTENT)
     print(f"Created {{yaml_file}}")
@@ -187,13 +191,22 @@ def main():
     gpus = get_visible_devices(gpus_list)
     print(f"Detected GPUs: {gpus}")
     
+    # Hand each job whichever card is actually free rather than assigning by
+    # i % len(gpus). Static round-robin both ignored other pipelines sharing the
+    # machine and relied on mutating os.environ from several threads, which races
+    # -- jobs piled onto one card while the rest idled.
+    pool = GPUPool(gpus)
+
+    def _run(cif_file, cluster_num):
+        with slot(pool) as gpu_id:
+            return process_cif(cif_file, gpu_id, cluster_num, step3_config,
+                               args.output_dir, diffusion_samples, args.override)
+
     with ThreadPoolExecutor(max_workers=len(gpus)) as executor:
         futures = []
         for i, cif_file in enumerate(cif_files):
-            gpu_id = gpus[i % len(gpus)]
             # Use index + 1 as cluster number
-            cluster_num = i + 1
-            futures.append(executor.submit(process_cif, cif_file, gpu_id, cluster_num, step3_config, args.output_dir, diffusion_samples, args.override))
+            futures.append(executor.submit(_run, cif_file, i + 1))
         
         for future in futures:
             future.result()

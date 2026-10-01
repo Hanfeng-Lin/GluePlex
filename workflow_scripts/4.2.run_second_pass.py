@@ -6,11 +6,15 @@ Parallelism is bounded by the number of unique GPUs referenced in the scripts
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _gpu_pool import GPUPool, slot
 
 
 def extract_gpu(script_path: Path) -> int:
@@ -18,15 +22,23 @@ def extract_gpu(script_path: Path) -> int:
     return int(m.group(1)) if m else 0
 
 
-def run_one(script_path: Path, cwd: Path) -> int:
-    print(f"[START] {script_path.name}")
-    try:
-        subprocess.run([sys.executable, str(script_path)], check=True, cwd=str(cwd))
-        print(f"[ OK ] {script_path.name}")
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"[FAIL] {script_path.name}: {e}", file=sys.stderr)
-        return e.returncode or 1
+def run_one(script_path: Path, cwd: Path, pool: GPUPool) -> int:
+    """Run one pass-2 job on whichever card is free.
+
+    The GPU baked into the script by 4.1 is only a fallback now: the scripts use
+    os.environ.setdefault, so the device pinned here by the launcher wins. Fixed
+    assignment left cards idle whenever another pipeline was sharing the host.
+    """
+    with slot(pool) as gpu:
+        print(f"[START] {script_path.name}  (GPU {gpu})")
+        try:
+            pool.run([sys.executable, str(script_path)], gpu,
+                     check=True, cwd=str(cwd))
+            print(f"[ OK ] {script_path.name}")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"[FAIL] {script_path.name}: {e}", file=sys.stderr)
+            return e.returncode or 1
 
 
 def main():
@@ -46,15 +58,16 @@ def main():
         print("Manifest is empty — nothing to run.", file=sys.stderr)
         sys.exit(1)
 
-    # Concurrency = number of unique GPUs the scripts target.
-    unique_gpus = {extract_gpu(s) for s in scripts}
+    # The GPUs the scripts were generated against define the pool; which job
+    # lands on which card is decided at run time.
+    unique_gpus = sorted({extract_gpu(s) for s in scripts})
+    gpu_pool = GPUPool(unique_gpus)
     max_workers = max(1, len(unique_gpus))
     print(f"Launching {len(scripts)} jobs across {max_workers} worker(s); "
-          f"GPUs in use: {sorted(unique_gpus)}")
+          f"GPU pool: {unique_gpus}")
 
-    failures = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        results = list(pool.map(lambda s: run_one(s, step4_dir), scripts))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        results = list(ex.map(lambda s: run_one(s, step4_dir, gpu_pool), scripts))
     failures = sum(1 for r in results if r != 0)
 
     if failures:

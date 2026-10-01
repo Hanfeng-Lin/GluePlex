@@ -45,7 +45,9 @@ templates:
 \"\"\"
 
 def main():
-    os.environ["CUDA_VISIBLE_DEVICES"] = str({gpu_id})
+    # the launcher may pin the device through the environment; only fall back
+    # to the value baked in at generation time if it did not
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", str({gpu_id}))
     yaml_file = "{yaml_filename}"
     with open(yaml_file, "w") as f:
         f.write(YAML_CONTENT)
