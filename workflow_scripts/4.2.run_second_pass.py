@@ -18,7 +18,17 @@ from _gpu_pool import GPUPool, slot
 
 
 def extract_gpu(script_path: Path) -> int:
-    m = re.search(r'CUDA_VISIBLE_DEVICES"\]\s*=\s*str\((\d+)\)', script_path.read_text())
+    """Device baked into a generated script by 4.1.
+
+    Matches both spellings: the original `os.environ["CUDA_VISIBLE_DEVICES"] =
+    str(N)` and the current `os.environ.setdefault("CUDA_VISIBLE_DEVICES",
+    str(N))`. When 4.1 switched to setdefault this regex stopped matching and
+    silently returned the 0 fallback for every script, so the pool was built
+    from {0} and every job ran on device 0, one at a time.
+    """
+    txt = script_path.read_text()
+    m = re.search(r'CUDA_VISIBLE_DEVICES"\s*\]\s*=\s*str\((\d+)\)', txt) or \
+        re.search(r'setdefault\(\s*"CUDA_VISIBLE_DEVICES"\s*,\s*str\((\d+)\)', txt)
     return int(m.group(1)) if m else 0
 
 
