@@ -29,3 +29,5 @@ __pycache__/
 
 # CRBN neosubstrate benchmark (large: structures, Boltz outputs, plots)
 crbn_benchmark/
+crbn_multipdb_medoid/
+crbn_multipdb_pesto/
