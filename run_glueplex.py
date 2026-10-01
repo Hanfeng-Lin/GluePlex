@@ -518,6 +518,15 @@ def main():
             base = target_pdb
         target_pesto_pdb = os.path.join(step1_dir, f"{base}_pesto.pdb")
 
+        # Prefer the aggregated actives if step 1 produced them. Without this,
+        # invoking `--step 1` and `--step 2` as separate runs silently reverts to
+        # the single-structure PeSTo output, because this branch rebuilds the path
+        # by convention instead of taking step 1's return value.
+        aggregated = os.path.join(step1_dir, f"{base}_pesto_aggregated.pdb")
+        if os.path.exists(aggregated):
+            target_pesto_pdb = aggregated
+            print(f"Step 2 input: using aggregated PeSTo actives ({aggregated})")
+
         if not args.replot and not os.path.exists(target_pesto_pdb):
              print(f"Warning: {target_pesto_pdb} does not exist. Step 2 might fail.")
 
