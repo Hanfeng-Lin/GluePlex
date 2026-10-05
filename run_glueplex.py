@@ -85,6 +85,48 @@ def run_command(cmd, env=None, cwd=None, log_file=None):
             print(f"Error running command: {e}")
             sys.exit(1)
 
+def write_zeroed_target(target_pdb, step1_dir):
+    """Stand in for step 1 by writing the target with no interface signal.
+
+    `2.0.fetch_active_res.py` keeps CA atoms whose B-factor is >= 0.3, which is
+    where PeSTo writes its per-residue interface score. Zeroing that column
+    leaves it with nothing to keep, so it falls through to its SASA branch and
+    restrains the docking to the whole solvent-accessible surface instead of a
+    predicted interface. That fallback is exercised for real rather than
+    bypassed by writing `target_active_res` into the config by hand.
+
+    Residues are renumbered 1..N per chain because PeSTo renumbers its output
+    and everything downstream was built against that convention; a target whose
+    author numbering starts at 413 would otherwise change the numbering as well
+    as the signal, which is a second variable.
+
+    CRBN is untouched and keeps its hand-picked actives, so only the TARGET side
+    loses the signal.
+    """
+    os.makedirs(step1_dir, exist_ok=True)
+    base = os.path.splitext(os.path.basename(target_pdb))[0]
+    out = os.path.join(step1_dir, f"{base}_pesto.pdb")
+
+    seen, nres = {}, 0
+    with open(target_pdb) as fi, open(out, "w") as fo:
+        for line in fi:
+            if line.startswith(("ATOM", "HETATM")) and len(line) >= 66:
+                chain, resid = line[21], line[22:27]
+                key = (chain, resid)
+                if key not in seen:
+                    seen[key] = len(seen) + 1
+                    nres += 1
+                line = (line[:22] + f"{seen[key]:4d} " + line[27:60]
+                        + "  0.00" + line[66:])
+            fo.write(line)
+    if not nres:
+        print(f"Error: no ATOM records in {target_pdb}; nothing to dock.")
+        sys.exit(1)
+    print(f"Step 1 skipped (arm nopesto): wrote {out} "
+          f"with {nres} residues renumbered 1..{nres} and B-factors zeroed.")
+    return out
+
+
 def step1_pesto(config, project_dir, input_dir, log_file):
     # Clear log file
     if log_file:
@@ -98,6 +140,13 @@ def step1_pesto(config, project_dir, input_dir, log_file):
     step1_dir = os.path.join(project_dir, "step1_pesto")
     if not os.path.exists(step1_dir):
         os.makedirs(step1_dir)
+
+    if config.get('skip_pesto'):
+        if not os.path.exists(target_pdb):
+            print(f"Error: skip_pesto needs a local file; '{target_pdb}' "
+                  f"does not exist (a PDB ID cannot be used here).")
+            sys.exit(1)
+        return write_zeroed_target(target_pdb, step1_dir)
     
     # Determine if it's an ID or file
     if os.path.exists(target_pdb):

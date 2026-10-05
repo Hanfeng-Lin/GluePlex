@@ -1,0 +1,28 @@
+# Arm `msa`: Boltz-2 alone -- MSA from the server, no docking, no template.
+#
+# Copy this file, fill in the two sequences and the SMILES, and run
+#   python run_msa_baseline.py --config <your copy>.yaml
+
+project_name: "Result_MYTARGET_CRBN"
+base_dir: "."                      # runs are written to <base_dir>/<project_name>
+
+# No step 1 or 2: nothing is docked, so target_pdb, the HADDOCK settings and
+# CRBN_pesto.pdb are all unused and omitted.
+
+# Optional. A solved ternary structure to measure against; leave it out and the
+# output CSV simply has no ref_rmsd column.
+# ref_pdb: "./reference/MYTARGET_CRBN_ternary.pdb"
+
+# --- Boltz-2 ------------------------------------------------------------
+# Kept under `step3` so this file stays readable next to the other arms.
+step3:
+  protein_a_name: "CRBN"
+  protein_a_sequence: "IINFDTSLPTSHTYLGADMEEFHGRTLHDDDSCQVIPVLPQVMMILIPGQTLPLQLFHPQEVSMVRNLIQKDRTFAVLAYSNVQEREAQFGTTAEIYAYREEQDFGIEIVKVKAIGRQRFKVLELRTQSDGIQQAKVQILPECVLPSTMSAVQLESLNKCQIFPSKPVSREDQCSYKWWQKYQKRKFHCANLTSWPRWLYSLYDAETLMDRIKKQLREWDENLKDDSLPSNPIDFSYRVAACLPIDDVLRIQLLKIGSAIQRLRCELDIMNKCTSLCCKQCQETEITTKNEIFSLSLCGPMAAYVNPHGYVHETLTVYKACNLNLIGRPSTEHSWFPGYAWTVAQCKICASHIGWKFTATKKDMSPQKFWGLTRSALLPTIPDTEDEISPDKVILCL"
+  protein_b_name: "MYTARGET"
+  protein_b_sequence: "REPLACE_WITH_YOUR_TARGET_SEQUENCE"
+  ligand_name: "MYGLUE"
+  ligand_smiles: "REPLACE_WITH_YOUR_SMILES"
+
+  # diffusion_samples is NOT read here -- pass --samples instead (default 440,
+  # matched to the median model count of a full two-pass GluePlex run).
+  gpus: [0]                        # this runner uses the first entry only

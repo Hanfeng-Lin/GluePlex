@@ -2,7 +2,9 @@
 
 GluePlex is an automated pipeline for molecular glue docking and analysis, integrating **PeSTo** for interface prediction, **HADDOCK3** for docking, and **Boltz2** for confidence scoring and refinement.
 
-The `GluePlex_doublepass` branch adds a **Step 4** that re-runs Boltz2 using the top predictions from Step 3 as multi-chain templates, concentrating sampling around the best interfaces, then produces a combined analysis of both passes.
+**Step 4** re-runs Boltz2 using the top predictions from Step 3 as multi-chain templates, concentrating sampling around the best interfaces, then produces a combined analysis of both passes.
+
+The pipeline can be run in six **arms** that differ in how the docking template is built, from the full pipeline down to Boltz2 on its own. See [Choosing an arm](#choosing-an-arm).
 
 ## Overview
 
@@ -108,9 +110,94 @@ The pipeline relies on three specific Conda environments being available on your
     conda activate pesto
     ```
 
+## Choosing an arm
+
+The same pipeline can be run six ways. They differ in exactly one thing — how
+much structural guidance Boltz2 is given before it predicts — so running more
+than one tells you where a result is coming from.
+
+Pick one by copying the matching file out of `examples/`. Five of the six are
+configuration only and use the normal entry point; the sixth has its own
+runner because it skips docking entirely.
+
+| arm | what it docks | interface residues | config | command |
+|---|---|---|---|---|
+| `af` | an AlphaFold model | PeSTo on that model | `examples/arm_af.yaml` | `run_glueplex.py` |
+| `aggaf` | an AlphaFold model | PeSTo unioned over **every** structure you supply | `examples/arm_aggaf.yaml` | `run_glueplex.py` |
+| `medoid` | the most central experimental chain | same union | `examples/arm_medoid.yaml` | `run_glueplex.py` |
+| `pesto` | the experimental chain PeSTo scores highest | same union | `examples/arm_pesto.yaml` | `run_glueplex.py` |
+| `nopesto` | an AlphaFold model | **none** — HADDOCK falls back to SASA | `examples/arm_nopesto.yaml` | `run_glueplex.py` |
+| `msa` | nothing — no docking at all | — | `examples/arm_msa.yaml` | `run_msa_baseline.py` |
+
+```bash
+cp examples/arm_af.yaml my_target.yaml
+# edit: target_pdb, the two sequences, ligand_smiles, gpus
+python run_glueplex.py --config my_target.yaml
+```
+
+### Which one do you want?
+
+**Start with `af`.** It needs one AlphaFold model of your target and nothing
+else, and it is the arm the others are measured against.
+
+**Use `aggaf`, `medoid` or `pesto` if your target has solved structures.** All
+three run PeSTo on every structure you list in `pesto_extra_pdbs` and union the
+predicted interface residues; they differ only in which coordinates get docked.
+`aggaf` still docks the AlphaFold model, so comparing it against `af` isolates
+what the extra interface evidence is worth, and comparing `medoid` or `pesto`
+against `aggaf` isolates what the experimental coordinates are worth. Compare
+`medoid` or `pesto` against `af` directly and you cannot tell those two apart,
+because both changed at once.
+
+`medoid` picks the chain with the lowest mean CA RMSD to all the others, which
+needs no scoring model. `pesto` picks the chain PeSTo is most confident about.
+Neither is reliably better; they disagree often enough to be worth running both
+if the target matters.
+
+**Use `nopesto` to find out whether the interface prediction is doing anything.**
+Step 1 is skipped and the target is written out with its B-factor column zeroed,
+so `2.0.fetch_active_res.py` finds no PeSTo residues and takes its SASA branch —
+the docking is restrained to the whole solvent-accessible surface. CRBN is
+untouched and keeps its hand-picked actives, so this removes the *target's*
+interface prediction, not the restraints as a whole. Needs NACCESS installed.
+
+**Use `msa` as the floor.** Off-the-shelf Boltz2: two sequences, a SMILES, an
+MSA from the MMseqs2 server, no PeSTo, no HADDOCK, no template. This is what
+published cofolding benchmarks measure, and the gap between it and any other
+arm is what the docking machinery is worth. It needs no structure of your
+target at all, so it is also the only arm you can run on a target that has none.
+
+```bash
+conda activate boltz_analysis          # `boltz` must be on PATH
+cp examples/arm_msa.yaml my_target.yaml
+python run_msa_baseline.py --config my_target.yaml --samples 440
+```
+
+`--samples` defaults to 440 to match the median number of models a full
+two-pass run produces, so the comparison is at equal sampling budget rather
+than at equal nominal settings. Sampling is chunked because Boltz draws a whole
+request in one batch and a large one runs out of memory. `--msa-cache DIR`
+reuses server MSAs across runs sharing a sequence.
+
+### Keeping arms comparable
+
+`pesto_aggregate` must stay at `union` in every arm that aggregates. It is the
+constant that makes the three aggregating arms differ only in which structure
+is docked; changing it introduces a second variable and the arms can no longer
+be read against each other. The other three merge strategies the aggregator
+accepts (`consensus`, `mean`, `best`) are there for a separate experiment, not
+for mixing into this comparison.
+
+Run each arm into its own `project_name`, or the later one will reuse the
+earlier one's step directories.
+
+
 ## Configuration
 
-The pipeline is controlled by `project_config.yaml`. Edit this file to define your inputs and parameters.
+The pipeline is controlled by a YAML config passed with `--config`. Start from
+the arm you want in `examples/` rather than from `project_config.yaml`, which is
+wired to one specific run on one host. The keys below are the full set; an arm's
+example file is this with the irrelevant parts removed.
 
 ```yaml
 # General Settings
@@ -118,6 +205,19 @@ base_dir: "/path/to/GluePlex"
 
 # Step 1: PeSTo
 target_pdb: "./VAV1_af2.pdb"  # Path to target PDB or PDB ID (auto parsing e.g., 1E9H_A)
+
+# Optional. Other structures of the same target; PeSTo runs on each and the
+# predicted interface residues are merged into target_pdb's numbering.
+# Unset = single-structure behaviour, i.e. the `af` arm.
+# pesto_extra_pdbs:
+#   - "./structures/TARGET_1abc_A.pdb"
+# pesto_aggregate: union        # union | consensus | mean | best — keep at union
+# pesto_threshold: 0.3          # a residue is active at or above this score
+
+# Optional. Skip PeSTo and write target_pdb out with zeroed B-factors, so
+# step 2 finds no interface residues and falls back to SASA. The `nopesto`
+# arm. Requires target_pdb to be a local file, not an ID.
+# skip_pesto: true
 
 # Step 2: HADDOCK3
 # Active residues for Target. If empty, they will be fetched automatically

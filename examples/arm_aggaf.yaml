@@ -1,0 +1,51 @@
+# Arm `aggaf`: PeSTo actives unioned over several structures of the target,
+# while the DOCKED coordinates stay the AlphaFold model.
+#
+# Copy this file, point it at your own target, and run
+#   python run_glueplex.py --config <your copy>.yaml
+
+project_name: "Result_MYTARGET_CRBN"
+base_dir: "."                      # runs are written to <base_dir>/<project_name>
+
+# --- Step 1: PeSTo ------------------------------------------------------
+# An AlphaFold model of the target, or a PDB ID to fetch. This is also what
+# gets docked -- aggregation changes the ACTIVES, not the coordinates.
+target_pdb: "./MYTARGET_af2.pdb"
+
+# Every other structure of the same target you have. PeSTo runs on each and the
+# interface residues are merged into target_pdb's numbering. Leave the list out
+# and this config behaves exactly like the `af` arm.
+pesto_extra_pdbs:
+  - "./structures/MYTARGET_1abc_A.pdb"
+  - "./structures/MYTARGET_2def_B.pdb"
+pesto_aggregate: union      # union | consensus | mean | best
+# KEEP THIS AT `union`. It is the one setting held constant across every arm
+# that aggregates, so the arms differ only in WHICH STRUCTURE IS DOCKED.
+# Changing it makes this run incomparable with the others.
+pesto_threshold: 0.3        # a residue is active at or above this PeSTo score
+
+# --- Step 2: HADDOCK3 ---------------------------------------------------
+# CRBN is partner 2 and is fixed: CRBN_pesto.pdb ships with this repo and
+# already carries its hand-picked actives (105, 332, 341).
+# Leave target_active_res unset -- step 1's PeSTo scores supply it.
+haddock_run_dir: "haddock_results"
+haddock_ncores: 80
+
+# --- Step 3: Boltz-2, pass 1 -------------------------------------------
+step3:
+  protein_a_name: "CRBN"
+  protein_a_sequence: "IINFDTSLPTSHTYLGADMEEFHGRTLHDDDSCQVIPVLPQVMMILIPGQTLPLQLFHPQEVSMVRNLIQKDRTFAVLAYSNVQEREAQFGTTAEIYAYREEQDFGIEIVKVKAIGRQRFKVLELRTQSDGIQQAKVQILPECVLPSTMSAVQLESLNKCQIFPSKPVSREDQCSYKWWQKYQKRKFHCANLTSWPRWLYSLYDAETLMDRIKKQLREWDENLKDDSLPSNPIDFSYRVAACLPIDDVLRIQLLKIGSAIQRLRCELDIMNKCTSLCCKQCQETEITTKNEIFSLSLCGPMAAYVNPHGYVHETLTVYKACNLNLIGRPSTEHSWFPGYAWTVAQCKICASHIGWKFTATKKDMSPQKFWGLTRSALLPTIPDTEDEISPDKVILCL"
+  protein_b_name: "MYTARGET"
+  protein_b_sequence: "REPLACE_WITH_YOUR_TARGET_SEQUENCE"
+  ligand_name: "MYGLUE"
+  ligand_smiles: "REPLACE_WITH_YOUR_SMILES"
+
+  diffusion_samples: 20
+  gpus: [0]                        # one entry per GPU you want to use
+
+# --- Step 4: Boltz-2, pass 2 -------------------------------------------
+step4:
+  top_n: 10                        # docking clusters carried into pass 2
+  diffusion_samples: 20            # samples per template
+  rank_metric: pair_chains_ipTM_avg
+  gpus: [0]
