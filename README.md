@@ -154,6 +154,21 @@ needs no scoring model. `pesto` picks the chain PeSTo is most confident about.
 Neither is reliably better; they disagree often enough to be worth running both
 if the target matters.
 
+Do not pick the medoid by eye — `workflow_scripts/0.pick_medoid.py` computes it
+and prints a config block ready to paste:
+
+```bash
+python workflow_scripts/0.pick_medoid.py structures/MYTARGET_*.pdb --emit-config
+```
+
+It also prints the **spread**, the largest pairwise RMSD in the set. Read it
+first: when every candidate is within ~0.5 A of every other, which one you dock
+barely matters and `aggaf` is the cheaper arm to run.
+
+Residues are paired by number when the numbering agrees and by sequence
+alignment only when it does not. If your structures carry inconsistent author
+numbering, check the reported residue counts before trusting the pick.
+
 **Use `nopesto` to find out whether the interface prediction is doing anything.**
 Step 1 is skipped and the target is written out with its B-factor column zeroed,
 so `2.0.fetch_active_res.py` finds no PeSTo residues and takes its SASA branch —

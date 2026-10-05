@@ -8,9 +8,11 @@ project_name: "Result_MYTARGET_CRBN"
 base_dir: "."                      # runs are written to <base_dir>/<project_name>
 
 # --- Step 1: PeSTo ------------------------------------------------------
-# Pick the medoid yourself: superpose your chains and keep the one with the
-# lowest mean RMSD to the rest. It is a property of your structure set, not
-# something this pipeline computes.
+# The medoid: the chain with the lowest mean CA RMSD to all the others. Do not
+# eyeball it --
+#   python workflow_scripts/0.pick_medoid.py structures/MYTARGET_*.pdb --emit-config
+# prints this block, applies a coverage guard, and reports the spread so you
+# can see whether the choice matters for your target at all.
 target_pdb: "./structures/MYTARGET_1abc_A.pdb"
 
 # Every OTHER structure of the same target, i.e. all of them except the one
