@@ -129,6 +129,10 @@ def main():
                          "largest residue count (default 0.9)")
     ap.add_argument("--emit-config", action="store_true",
                     help="print the target_pdb / pesto_extra_pdbs block")
+    ap.add_argument("--af-model", default=None,
+                    help="your AlphaFold model of the target; it contributes "
+                         "PeSTo actives to the union even though it is not "
+                         "docked, and is listed in the emitted config")
     a = ap.parse_args()
 
     loaded = []
@@ -188,6 +192,14 @@ def main():
         print("\n# paste into your arm_medoid.yaml")
         print(f'target_pdb: "{med}"')
         print("pesto_extra_pdbs:")
+        # Everything that is not docked still contributes actives. Chains
+        # dropped by --min-coverage are left out of both: a chain too short to
+        # judge for centrality is also the one whose actives cover least.
+        if a.af_model:
+            print(f'  - "{a.af_model}"')
+        else:
+            print("  # add your AlphaFold model here -- it is not docked in this")
+            print("  # arm but its PeSTo actives belong in the union")
         for x in kept:
             if x["path"] != med:
                 print(f'  - "{x["path"]}"')

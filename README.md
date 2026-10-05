@@ -154,20 +154,65 @@ needs no scoring model. `pesto` picks the chain PeSTo is most confident about.
 Neither is reliably better; they disagree often enough to be worth running both
 if the target matters.
 
-Do not pick the medoid by eye — `workflow_scripts/0.pick_medoid.py` computes it
+#### Picking the chain to dock
+
+Do not do this by eye. `workflow_scripts/0.pick_medoid.py` computes the medoid
 and prints a config block ready to paste:
 
 ```bash
-python workflow_scripts/0.pick_medoid.py structures/MYTARGET_*.pdb --emit-config
+python workflow_scripts/0.pick_medoid.py structures/NEK7_*.pdb \
+    --af-model NEK7_af2.pdb --emit-config
 ```
 
-It also prints the **spread**, the largest pairwise RMSD in the set. Read it
-first: when every candidate is within ~0.5 A of every other, which one you dock
-barely matters and `aggaf` is the cheaper arm to run.
+```
+  excluded NEK7_20-300_6npy_B.pdb: 188/281 residues, below --min-coverage 0.9
 
-Residues are paired by number when the numbering agrees and by sequence
-alignment only when it does not. If your structures carry inconsistent author
+10 structures, pairwise CA RMSD over matched residues
+
+  structure                          chain   res  mean RMSD
+  ---------------------------------------------------------
+  NEK7_20-300_2wqm_A.pdb                 A   258      1.519  <- medoid
+  NEK7_20-300_6s76_A.pdb                 A   266      1.521
+  NEK7_20-300_6s75_A.pdb                 A   266      1.535
+  ...
+  NEK7_20-300_8ej4_K.pdb                 A   261      2.129
+
+  spread (largest pairwise RMSD): 2.511 A
+  -> a real conformational range, so the choice is worth making deliberately.
+```
+
+Three things in that output decide whether to bother:
+
+**The spread.** The largest pairwise RMSD in the set. Below ~0.5 A the
+candidates are interchangeable and `aggaf` is the cheaper arm — it needs no
+choice at all. NEK7 above is the opposite case: 2.5 A is a real conformational
+change and the pick is worth making deliberately.
+
+**The gap between the top rows.** NEK7's first two differ by 0.002 A, so
+"the medoid" is not a meaningful winner there even though the set is spread
+out; that is a target where running `pesto` as well tells you something.
+
+**What got excluded.** `--min-coverage` (default 0.9) drops chains with far
+fewer residues than the rest, because a chain with little to disagree about
+looks central for the wrong reason. Excluded chains are left out of
+`pesto_extra_pdbs` too — a chain too short to judge is also the one
+contributing least to the union.
+
+Options you may need:
+
+| flag | when |
+|---|---|
+| `--af-model PATH` | almost always: the AlphaFold model is not docked in this arm, but its PeSTo actives belong in the union. Without it the emitted config carries a reminder comment instead. |
+| `--chain X` | your files carry several chains and the longest is not the target |
+| `--min-coverage F` | your structures legitimately differ in length, e.g. one construct is shorter by design |
+
+Residues are paired by number when the numbering agrees, and by sequence
+alignment only when it does not. If your files carry inconsistent author
 numbering, check the reported residue counts before trusting the pick.
+
+**For the `pesto` arm** there is no script: dock the chain with the highest
+PeSTo interface score, which you read off step 1's output after running PeSTo
+on each candidate.
 
 **Use `nopesto` to find out whether the interface prediction is doing anything.**
 Step 1 is skipped and the target is written out with its B-factor column zeroed,
