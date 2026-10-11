@@ -61,6 +61,9 @@ def main():
         "--output_format", "pdb",
         "--diffusion_samples", str({diffusion_samples}),
     ]
+    # Same optional seed as pass 1; absent, boltz draws its own as before.
+    if {boltz_seed} is not None:
+        cmd += ["--seed", str({boltz_seed})]
     if {override}:
         cmd.append("--override")
 
@@ -144,7 +147,8 @@ def convert_pdbs_to_cif(selection, out_dir: Path) -> dict:
 
 
 def write_job_files(selection, cif_paths: dict, step3_config, step4_dir: Path,
-                    diffusion_samples: int, gpus: list, override: bool) -> list:
+                    diffusion_samples: int, gpus: list, override: bool,
+                    boltz_seed=None) -> list:
     """Write per-template YAML + wrapper run script. Return the run script paths."""
     protein_a_name = step3_config["protein_a_name"]
     protein_b_name = step3_config["protein_b_name"]
@@ -163,6 +167,7 @@ def write_job_files(selection, cif_paths: dict, step3_config, step4_dir: Path,
         template_cif = cif_paths[rank]
 
         content = SCRIPT_TEMPLATE.format(
+            boltz_seed=boltz_seed,
             protein_a_name=protein_a_name,
             protein_a_seq=protein_a_seq,
             protein_b_name=protein_b_name,
@@ -250,6 +255,7 @@ def main():
         diffusion_samples=int(diffusion_samples),
         gpus=list(gpus),
         override=bool(args.override),
+        boltz_seed=full_config.get("boltz_seed"),
     )
     # Emit a manifest so 4.2 can find the run scripts deterministically.
     manifest = step4_dir / "pass2_manifest.txt"

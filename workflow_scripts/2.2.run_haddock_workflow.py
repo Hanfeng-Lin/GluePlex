@@ -33,7 +33,8 @@ def renumber_chain(input_pdb, output_pdb, new_chain_id):
             else:
                 fout.write(line)
 
-def generate_config(pdb1_path, pdb2_path, restraint_path, run_dir, ncores, output_config, mode="mpi"):
+def generate_config(pdb1_path, pdb2_path, restraint_path, run_dir, ncores, output_config, mode="mpi", iniseed=None):
+    iniseed_line = f"iniseed = {iniseed}" if iniseed is not None else ""
     """Generates the HADDOCK3 configuration file."""
     config_content = f"""# ====================================================================
 # Protein-protein docking example with NMR-derived ambiguous interaction restraints
@@ -65,6 +66,7 @@ autohis = false
 tolerance = 5
 ambig_fname = "{restraint_path}"
 sampling = 1000
+{iniseed_line}
 
 [caprieval]
 reference_fname = "{pdb1_path}"
@@ -110,6 +112,14 @@ def main():
     parser.add_argument("--run_dir", default="run1-mdref-full", help="HADDOCK3 run directory.")
     parser.add_argument("--config", default="docking.cfg", help="Output configuration filename.")
     parser.add_argument("--ncores", type=int, default=48, help="Number of cores to use.")
+    parser.add_argument("--iniseed", type=int, default=None,
+                        help="CNS random seed for the rigidbody stage. Omitted, "
+                             "haddock3 uses its own default (917) and the run "
+                             "behaves exactly as before. Note that fixing it "
+                             "does not by itself make HADDOCK reproducible: "
+                             "the parallel CNS workers finish in whatever order "
+                             "they finish, and with sampling=1000 that reorders "
+                             "the clustering.")
     parser.add_argument("--mode", default="mpi", choices=["mpi", "local"],
                         help="HADDOCK3 execution mode. 'local' uses multiprocessing on one "
                              "node and avoids the CUDA-enabled OpenMPI stack.")
@@ -149,7 +159,8 @@ def main():
         renumber_chain(pdb2, final_pdb2, 'B')
     
     # 2. Generate Configuration
-    generate_config(final_pdb1, final_pdb2, args.restraint, args.run_dir, args.ncores, args.config, args.mode)
+    generate_config(final_pdb1, final_pdb2, args.restraint, args.run_dir,
+                    args.ncores, args.config, args.mode, args.iniseed)
     
     # 3. Run HADDOCK3
     if os.path.exists(args.run_dir):

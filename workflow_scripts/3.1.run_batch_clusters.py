@@ -54,7 +54,13 @@ def main(yaml_file, out_dir, output_format="pdb", diffusion_samples={diffusion_s
         "--diffusion_samples",
         str(diffusion_samples)
     ]
-    
+
+    # A fixed seed makes a run repeatable. Absent, boltz draws its own and the
+    # pipeline behaves exactly as before, so adding this changes nothing for
+    # configs that do not ask for it.
+    if {boltz_seed} is not None:
+        cmd += ["--seed", str({boltz_seed})]
+
     if override:
         cmd.append("--override")
     
@@ -89,7 +95,7 @@ def get_visible_devices(gpus=None):
             pass
         return [0] # Default to device 0 if detection fails
 
-def process_cif(cif_file, gpu_id, cluster_num, config, output_dir, diffusion_samples, override=False):
+def process_cif(cif_file, gpu_id, cluster_num, config, output_dir, diffusion_samples, override=False, boltz_seed=None):
     """Generate script and run it."""
     cif_path = Path(cif_file)
     if not cif_path.exists():
@@ -115,6 +121,7 @@ def process_cif(cif_file, gpu_id, cluster_num, config, output_dir, diffusion_sam
         shutil.rmtree(out_dir)
 
     script_content = SCRIPT_TEMPLATE.format(
+        boltz_seed=boltz_seed,
         cif_path=f"{cif_path.resolve()}",
         yaml_filename=yaml_filename,
         out_dir=out_dir,
@@ -200,7 +207,8 @@ def main():
     def _run(cif_file, cluster_num):
         with slot(pool) as gpu_id:
             return process_cif(cif_file, gpu_id, cluster_num, step3_config,
-                               args.output_dir, diffusion_samples, args.override)
+                               args.output_dir, diffusion_samples, args.override,
+                               boltz_seed=full_config.get("boltz_seed"))
 
     with ThreadPoolExecutor(max_workers=len(gpus)) as executor:
         futures = []

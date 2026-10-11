@@ -318,7 +318,12 @@ def step2_haddock(config, target_pesto_pdb, project_dir, log_file):
            "--run_dir", run_dir,
            "--ncores", str(ncores),
            "--mode", config.get('haddock_mode', 'mpi')]
-           
+    # Optional. Fixing the CNS seed is necessary for a repeat to be
+    # reproducible but not sufficient: the parallel workers still finish in
+    # whatever order they finish. Unset, haddock3 keeps its own default.
+    if config.get('haddock_seed') is not None:
+        cmd += ["--iniseed", str(config['haddock_seed'])]
+
     run_command(cmd, env="haddock3", cwd=step2_dir, log_file=log_file)
     
     # 2.3 Export mmCIF

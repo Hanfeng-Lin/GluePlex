@@ -35,3 +35,7 @@ crbn_abl_nopesto/
 crbn_abl_msa/
 crbn_abl_aggaf/
 crbn_multizf/
+
+# repeat runs: raw structures for the seeded repeats, rebuilt by
+# crbn_benchmark/meta/repeat_sched.py from the per-arm indices
+crbn_repeat/
