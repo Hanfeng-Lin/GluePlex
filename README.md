@@ -1,53 +1,130 @@
 # GluePlex
 
-GluePlex is an automated pipeline for molecular glue docking and analysis, integrating **PeSTo** for interface prediction, **HADDOCK3** for docking, and **Boltz2** for confidence scoring and refinement.
+GluePlex predicts CRBN ternary complexes by giving a co-folding model a
+structural prior it does not generate for itself. A geometric interface
+predictor restrains a protein-protein docking stage that never sees the glue,
+and the docked geometries are handed to Boltz-2 as multi-chain templates. The
+small molecule enters only at the co-folding stage, so the protein-protein
+frame and the ligand pose are produced by different parts of the method and
+can be attributed separately when one of them fails.
 
-**Step 4** re-runs Boltz2 using the top predictions from Step 3 as multi-chain templates, concentrating sampling around the best interfaces, then produces a combined analysis of both passes.
+This repository holds the pipeline, the CRBN benchmark it was evaluated on,
+and the analysis that produces every figure and table in the accompanying
+manuscript.
 
-The pipeline can be run in six **arms** that differ in how the docking template is built, from the full pipeline down to Boltz2 on its own. See [Choosing an arm](#choosing-an-arm).
+## Citation
 
-## Overview
+The manuscript is in preparation. Until it appears, cite this repository by
+its commit.
 
-The pipeline consists of four steps, each orchestrated by `run_glueplex.py` and implemented by numbered scripts in `workflow_scripts/`:
+## What is in here
 
-1.  **Step 1: PeSTo** — Predicts interface residues on the target protein.
-2.  **Step 2: HADDOCK3** — Data-driven docking using the predicted interface to generate initial ternary models.
-3.  **Step 3: Boltz2 (Pass 1)** — Re-predicts each HADDOCK cluster with Boltz2, scores by ipTM, and visualizes with PCA/UMAP.
-4.  **Step 4: Boltz2 (Pass 2)** — Re-runs Boltz2 using the top-N Pass-1 models as multi-chain templates, then merges both passes for unified analysis.
+| path | what it is |
+|---|---|
+| `run_glueplex.py` | the pipeline, all four steps |
+| `run_msa_baseline.py` | the no-docking control, which skips straight to co-folding |
+| `workflow_scripts/` | the numbered scripts each step calls |
+| `tools/apply_model.py` | the PeSTo entry point; PeSTo itself is cloned, see Installation |
+| `examples/` | one configuration file per arm |
+| `env_*.yml` | the three conda environments |
+| `VAV1_af2.pdb`, `CRBN_pesto.pdb` | inputs for the worked example |
 
-The sections below detail what each step actually does internally.
+The CRBN benchmark, the per-model scores and the figure scripts are not in the
+repository. They accompany the manuscript as supplementary data.
+
+## The pipeline
+
+![The GluePlex workflow, with G3BP2 and compound A1CED as the example](docs/figure1_workflow.png)
+
+Four steps, orchestrated by `run_glueplex.py`.
 
 ### Step 1 — PeSTo interface prediction
 
-*Script: `tools/PeSTo/apply_model.py` (run via the orchestrator)*
+*`tools/PeSTo/apply_model.py`*
 
-- Accepts `target_pdb` as either a local PDB file or a PDB ID (e.g. `1E9H_A`, with optional chain selection). Files are copied into `input/`; IDs are fetched on the fly.
-- Runs the **PeSTo** deep-learning model (PyTorch) to score every residue for the probability of being part of a protein–protein interface.
-- Writes the per-residue interface probability into the **B-factor column** of `step1_pesto/{base}_pesto.pdb`. This annotated PDB feeds Step 2.
+Accepts `target_pdb` as a local file or a PDB ID with optional chain
+selection. PeSTo scores every residue for the probability of lying in a
+protein-protein interface and the score is written into the B-factor column of
+`step1_pesto/{base}_pesto.pdb`, which is what Step 2 reads.
 
 ### Step 2 — HADDOCK3 docking
 
-Three sub-steps, all run in the `haddock3` environment:
+Run in the `haddock3` environment, in three parts.
 
-- **2.0 `fetch_active_res.py`** — Derives the target's active (interface) residues when `target_active_res` is not set in the config. It runs **NACCESS** to compute relative solvent accessibility (keeping residues >15% exposed), parses the PeSTo B-factors (keeping CA atoms with score ≥ 0.3), and takes the **intersection** (interface ∧ surface-exposed). It falls back to PeSTo-only or SASA-only if the intersection is empty, and prints the residues as a comma-separated list.
-- **2.1 `generate_actpass.py`** — Builds HADDOCK3 ambiguous interaction restraints (`restraint.tbl`). The fixed partner (CRBN) uses hardcoded active residues `105,332,341`; the target uses the residues from 2.0. For each partner it derives passive residues via `haddock3-restraints passive_from_active`, then combines both into ambiguous restraints with `active_passive_to_ambig`.
-- **2.2 `run_haddock_workflow.py`** — Normalizes chain IDs (fixed partner → chain A, target → chain B), generates a HADDOCK3 config, and runs `haddock3` in MPI mode (`ncores` from config). The docking protocol is: `topoaa` → `rigidbody` (sampling 1000) → `seletop` (top 200) → `flexref` → `mdref` → `clustfcc` → `seletopclusts` (top 4 models/cluster), with `caprieval` evaluation after each refinement stage.
-- **2.3 `export_mmcif.py`** — Locates the `*_seletopclusts` directory, takes the top model of each cluster (`cluster_*model_1.pdb.gz`), and converts each to **mmCIF** with ChimeraX (`bestGuess true`) so Boltz2 can use them as templates.
+- **`2.0 fetch_active_res.py`** derives the target's active residues when
+  `target_active_res` is unset: NACCESS for relative solvent accessibility
+  (keeping residues above 15% exposed), the PeSTo B-factors (keeping CA atoms
+  at or above 0.3), and the **intersection** of the two. It falls back to
+  either alone if the intersection is empty.
+- **`2.1 generate_actpass.py`** builds the ambiguous restraints. CRBN uses the
+  fixed actives `105,332,341`; the target uses the residues from 2.0. Passive
+  residues come from `haddock3-restraints passive_from_active`.
+- **`2.2 run_haddock_workflow.py`** normalises chain IDs (CRBN to A, target to
+  B) and runs `topoaa` → `rigidbody` (sampling 1000) → `seletop` (200) →
+  `flexref` → `mdref` → `clustfcc` → `seletopclusts` (4 models per cluster),
+  with `caprieval` after each refinement.
+- **`2.3 export_mmcif.py`** converts the top model of every cluster to mmCIF
+  with ChimeraX so Boltz-2 can template on it.
 
-### Step 3 — Boltz2 Pass 1
+The glue is absent throughout Step 2 by design: the docking supplies physical
+prior information only.
 
-Two sub-steps, run in the `boltz_analysis` environment:
+### Step 3 — Boltz-2, pass 1
 
-- **3.1 `run_batch_clusters.py`** — For each cluster mmCIF from Step 2, generates a Boltz2 input YAML (chain A = protein A sequence, chain B = protein B sequence, ligand C = SMILES, `msa: empty`, and a **multi-chain template** spanning chains A+B) plus a wrapper run script, then runs `boltz predict` with `diffusion_samples` samples. CIFs are distributed round-robin across the configured GPUs via a thread pool (one prediction per GPU at a time).
-- **3.2 `post_analysis.py`** — Flattens all predicted PDBs/JSONs into `{protein_a}-{protein_b}/`, renumbers residues to match the configured ranges, then **superposes every model on chain A** (gemmi) and extracts chain B CA coordinates. It reads `ipTM` and `pair_chains_iptm` from the Boltz confidence JSONs into `atom.csv`, optionally computes reference RMSD (see `--ref`), writes `top10_models.log`, runs **PCA and UMAP** visualizations (interactive Bokeh HTML + static PNG), and packages the top-10 PDBs + plots into a `step3_top10_output/` folder.
+Every docked cluster representative becomes one template. Boltz-2 draws 20
+diffusion samples per template, with the glue SMILES and both sequences, and
+each model is scored on chain-pair ipTM.
 
-### Step 4 — Boltz2 Pass 2 (double-pass refinement)
+### Step 4 — Boltz-2, pass 2
 
-Three sub-steps, run in the `boltz_analysis` environment:
+The ten pass-1 structures with the highest chain-pair ipTM between CRBN and
+the target become templates for a second pass of 20 samples each, which gives
+roughly 20n + 200 structures per compound for n docked clusters. Both passes
+are then merged and re-clustered for analysis.
 
-- **4.1 `prepare_second_pass.py`** — Reads Step 3's `atom.csv`, sorts the Pass-1 rows by `rank_metric` (default `pair_chains_ipTM_avg`), and selects the top-N. Each selected PDB is converted to mmCIF via ChimeraX (Boltz's PDB template parser fails on bare-ATOM PDBs without SEQRES), and a per-template Boltz YAML + wrapper script is written into `step4_boltz/`. Emits `pass2_manifest.txt` and `pass2_template_mapping.log` (source → renamed template). Does not run Boltz itself.
-- **4.2 `run_second_pass.py`** — Reads the manifest and launches every pass-2 Boltz job in parallel, with concurrency bounded by the number of unique GPUs the jobs target.
-- **4.3 `merge_and_analyze.py`** — Symlinks all Pass-1 and Pass-2 PDBs/JSONs into `merged_pdbs/`, then re-runs `3.2.post_analysis.py` on the merged set to produce `atom_2ndpass.csv` and combined PCA/UMAP plots (Pass-2 points are visually distinguished — see [Analysis](#analysis)).
+## Arms
+
+The same pipeline runs six ways, differing in how much structural guidance
+Boltz-2 is given before it predicts. Copy the matching file out of
+`examples/`. Five are configuration only; the sixth has its own runner because
+it skips docking entirely.
+
+| arm | what it docks | interface residues | config |
+|---|---|---|---|
+| `af` | an AlphaFold model | PeSTo on that model | `examples/arm_af.yaml` |
+| `aggaf` | an AlphaFold model | PeSTo unioned over every structure supplied | `examples/arm_aggaf.yaml` |
+| `medoid` | the most central experimental chain | the same union | `examples/arm_medoid.yaml` |
+| `pesto` | the experimental chain PeSTo scores highest | **that chain's own actives, not a union** | `examples/arm_pesto.yaml` |
+| `nopesto` | an AlphaFold model | none, so HADDOCK falls back to SASA | `examples/arm_nopesto.yaml` |
+| `msa` | nothing, no docking at all | — | `examples/arm_msa.yaml` |
+
+`af` is the default arm and the one the manuscript reports.
+
+The `pesto` arm deliberately does not take the union. It picks its chain
+*because* that chain's PeSTo signal is the strongest among the gene's
+structures, and handing it a union prior would discard the quantity the
+selection rule is built on, leaving the rule setting nothing but the
+conformer. The flag lives in `UNION_ARMS = {"aggaf", "medoid"}` in
+`crbn_benchmark/meta/repeat_arms_index.py`. One consequence is that `medoid`
+and `pesto` differ in both the docked chain and the prior, so they are two
+recipes rather than a one-variable contrast.
+
+`msa` runs through `run_msa_baseline.py`: Boltz-2 with a server MSA, no
+template and no restraints, sampling at or above the pipeline's own budget and
+read out identically.
+
+### Keeping arms comparable
+
+`pesto_aggregate` must stay at `union` in the two arms that aggregate, `aggaf`
+and `medoid`. It is the constant that makes them differ only in which
+structure is docked; changing it introduces a second variable and the two can
+no longer be read against each other. The other merge strategies the
+aggregator accepts (`consensus`, `mean`, `best`) are there for a separate
+experiment, not for mixing into this comparison. The `pesto` arm does not
+aggregate at all, for the reason given above.
+
+Run each arm into its own `project_name`, or the later one will reuse the
+earlier one's step directories.
 
 ## Prerequisites
 
@@ -104,153 +181,7 @@ The pipeline relies on three specific Conda environments being available on your
     conda env create -f env_boltz_analysis.yml
     ```
 
-5.  **Orchestrator Environment** (Optional)
-    The orchestrator (`run_glueplex.py`) requires `PyYAML`. You can install it in your base environment or activate the pesto environment:
-    ```bash
-    conda activate pesto
-    ```
-
-## Choosing an arm
-
-The same pipeline can be run six ways. They differ in exactly one thing — how
-much structural guidance Boltz2 is given before it predicts — so running more
-than one tells you where a result is coming from.
-
-Pick one by copying the matching file out of `examples/`. Five of the six are
-configuration only and use the normal entry point; the sixth has its own
-runner because it skips docking entirely.
-
-| arm | what it docks | interface residues | config | command |
-|---|---|---|---|---|
-| `af` | an AlphaFold model | PeSTo on that model | `examples/arm_af.yaml` | `run_glueplex.py` |
-| `aggaf` | an AlphaFold model | PeSTo unioned over **every** structure you supply | `examples/arm_aggaf.yaml` | `run_glueplex.py` |
-| `medoid` | the most central experimental chain | same union | `examples/arm_medoid.yaml` | `run_glueplex.py` |
-| `pesto` | the experimental chain PeSTo scores highest | same union | `examples/arm_pesto.yaml` | `run_glueplex.py` |
-| `nopesto` | an AlphaFold model | **none** — HADDOCK falls back to SASA | `examples/arm_nopesto.yaml` | `run_glueplex.py` |
-| `msa` | nothing — no docking at all | — | `examples/arm_msa.yaml` | `run_msa_baseline.py` |
-
-```bash
-cp examples/arm_af.yaml my_target.yaml
-# edit: target_pdb, the two sequences, ligand_smiles, gpus
-python run_glueplex.py --config my_target.yaml
-```
-
-### Which one do you want?
-
-**Start with `af`.** It needs one AlphaFold model of your target and nothing
-else, and it is the arm the others are measured against.
-
-**Use `aggaf`, `medoid` or `pesto` if your target has solved structures.** All
-three run PeSTo on every structure you list in `pesto_extra_pdbs` and union the
-predicted interface residues; they differ only in which coordinates get docked.
-`aggaf` still docks the AlphaFold model, so comparing it against `af` isolates
-what the extra interface evidence is worth, and comparing `medoid` or `pesto`
-against `aggaf` isolates what the experimental coordinates are worth. Compare
-`medoid` or `pesto` against `af` directly and you cannot tell those two apart,
-because both changed at once.
-
-`medoid` picks the chain with the lowest mean CA RMSD to all the others, which
-needs no scoring model. `pesto` picks the chain PeSTo is most confident about.
-Neither is reliably better; they disagree often enough to be worth running both
-if the target matters.
-
-#### Picking the chain to dock
-
-Do not do this by eye. `workflow_scripts/0.pick_medoid.py` computes the medoid
-and prints a config block ready to paste:
-
-```bash
-python workflow_scripts/0.pick_medoid.py structures/NEK7_*.pdb \
-    --af-model NEK7_af2.pdb --emit-config
-```
-
-```
-  excluded NEK7_20-300_6npy_B.pdb: 188/281 residues, below --min-coverage 0.9
-
-10 structures, pairwise CA RMSD over matched residues
-
-  structure                          chain   res  mean RMSD
-  ---------------------------------------------------------
-  NEK7_20-300_2wqm_A.pdb                 A   258      1.519  <- medoid
-  NEK7_20-300_6s76_A.pdb                 A   266      1.521
-  NEK7_20-300_6s75_A.pdb                 A   266      1.535
-  ...
-  NEK7_20-300_8ej4_K.pdb                 A   261      2.129
-
-  spread (largest pairwise RMSD): 2.511 A
-  -> a real conformational range, so the choice is worth making deliberately.
-```
-
-Three things in that output decide whether to bother:
-
-**The spread.** The largest pairwise RMSD in the set. Below ~0.5 A the
-candidates are interchangeable and `aggaf` is the cheaper arm — it needs no
-choice at all. NEK7 above is the opposite case: 2.5 A is a real conformational
-change and the pick is worth making deliberately.
-
-**The gap between the top rows.** NEK7's first two differ by 0.002 A, so
-"the medoid" is not a meaningful winner there even though the set is spread
-out; that is a target where running `pesto` as well tells you something.
-
-**What got excluded.** `--min-coverage` (default 0.9) drops chains with far
-fewer residues than the rest, because a chain with little to disagree about
-looks central for the wrong reason. Excluded chains are left out of
-`pesto_extra_pdbs` too — a chain too short to judge is also the one
-contributing least to the union.
-
-Options you may need:
-
-| flag | when |
-|---|---|
-| `--af-model PATH` | almost always: the AlphaFold model is not docked in this arm, but its PeSTo actives belong in the union. Without it the emitted config carries a reminder comment instead. |
-| `--chain X` | your files carry several chains and the longest is not the target |
-| `--min-coverage F` | your structures legitimately differ in length, e.g. one construct is shorter by design |
-
-Residues are paired by number when the numbering agrees, and by sequence
-alignment only when it does not. If your files carry inconsistent author
-numbering, check the reported residue counts before trusting the pick.
-
-**For the `pesto` arm** there is no script: dock the chain with the highest
-PeSTo interface score, which you read off step 1's output after running PeSTo
-on each candidate.
-
-**Use `nopesto` to find out whether the interface prediction is doing anything.**
-Step 1 is skipped and the target is written out with its B-factor column zeroed,
-so `2.0.fetch_active_res.py` finds no PeSTo residues and takes its SASA branch —
-the docking is restrained to the whole solvent-accessible surface. CRBN is
-untouched and keeps its hand-picked actives, so this removes the *target's*
-interface prediction, not the restraints as a whole. Needs NACCESS installed.
-
-**Use `msa` as the floor.** Off-the-shelf Boltz2: two sequences, a SMILES, an
-MSA from the MMseqs2 server, no PeSTo, no HADDOCK, no template. This is what
-published cofolding benchmarks measure, and the gap between it and any other
-arm is what the docking machinery is worth. It needs no structure of your
-target at all, so it is also the only arm you can run on a target that has none.
-
-```bash
-conda activate boltz_analysis          # `boltz` must be on PATH
-cp examples/arm_msa.yaml my_target.yaml
-python run_msa_baseline.py --config my_target.yaml --samples 440
-```
-
-`--samples` defaults to 440 to match the median number of models a full
-two-pass run produces, so the comparison is at equal sampling budget rather
-than at equal nominal settings. Sampling is chunked because Boltz draws a whole
-request in one batch and a large one runs out of memory. `--msa-cache DIR`
-reuses server MSAs across runs sharing a sequence.
-
-### Keeping arms comparable
-
-`pesto_aggregate` must stay at `union` in every arm that aggregates. It is the
-constant that makes the three aggregating arms differ only in which structure
-is docked; changing it introduces a second variable and the arms can no longer
-be read against each other. The other three merge strategies the aggregator
-accepts (`consensus`, `mean`, `best`) are there for a separate experiment, not
-for mixing into this comparison.
-
-Run each arm into its own `project_name`, or the later one will reuse the
-earlier one's step directories.
-
+5.  **Orchestrator** — `run_glueplex.py` needs `PyYAML`.
 
 ## Configuration
 
@@ -341,12 +272,6 @@ You can run individual steps using the `--step` argument:
     python run_glueplex.py --step 4
     ```
 
-### Override Existing Results
-To force re-running Boltz predictions even if outputs exist:
-```bash
-python run_glueplex.py --step 3 --override
-```
-
 ### Reference PDB for RMSD Evaluation
 
 When a ground-truth crystal structure is available, use `--ref` to compute chain B CA RMSD for each predicted model:
@@ -420,10 +345,6 @@ The post-analysis generates plot variants in both PCA and UMAP, each as interact
 - **`ipTM`** — colors by the overall ipTM score of the model.
 - **`ref_rmsd`** — colors by chain B CA RMSD against the reference crystal structure (range 0–10 Å). Only generated when `--ref` is provided.
 
-### Pass Distinction
-
-In combined Pass 1 + Pass 2 plots, **Pass-2 points are drawn with black edges** to visually distinguish them from Pass-1 points, which have no edges. The `pass` column in `atom_2ndpass.csv` (1 or 2) encodes this programmatically.
-
 ### Reference RMSD
 
 The `--ref` flag enables ground-truth comparison. The alignment uses:
@@ -433,19 +354,15 @@ The `--ref` flag enables ground-truth comparison. The alignment uses:
 
 This handles common mismatches between crystal structures and predicted models (different residue ranges, missing density, truncated chains).
 
-### Viewing Plots on a Remote Server
+## Software versions
 
-```bash
-cd Result_VAV1_CRBN_GluePlex2pass/step4_boltz
-python -m http.server 8000
-```
-Then access `http://localhost:8000` in your browser (requires port forwarding).
+| | version |
+|---|---|
+| Boltz-2 | 2.2.1 (Python 3.12.12, PyTorch 2.9.1, CUDA 12.8) |
+| HADDOCK3 | 2025.11.0 (Python 3.9.25, PyTorch 2.8.0) |
+| PeSTo | commit `ba651aa`, checkpoint `i_v4_1_2021-09-07_11-21` |
+| AlphaFold DB | monomer v2.0 models, retrieved 2025-08-01 |
+| RDKit | 2025.9.3 in the prediction environment, 2024.09.6 in analysis |
+| analysis | Python 3.12.4, NumPy 1.26.4, SciPy 1.16.3, pandas 2.3.3, Biopython 1.86 |
+| rendering | Matplotlib 3.10.8, UCSF ChimeraX 1.10.1 |
 
-### Key Log Files
-
-- `step3_boltz/top10_models.log` — ranked list of the best Pass-1 predictions (with ref_rmsd if `--ref` was used).
-- `step4_boltz/pass2_template_mapping.log` — shows which Pass-1 model became which Pass-2 template (source → rename mapping).
-
-## Why Double-Pass?
-
-Boltz2 uniquely supports **multi-chain templates** — a single template can encode the relative orientation of two protein chains (e.g., CRBN and the target). AlphaFold 3, by contrast, only supports single-chain templates and rejects multi-chain mmCIFs. By using top-scoring Pass-1 ternary complexes as templates, Pass 2 concentrates Boltz sampling around the most plausible CRBN–glue–target geometries, often improving interface confidence scores.

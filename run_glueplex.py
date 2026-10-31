@@ -602,6 +602,36 @@ def main():
     if args.step == 4 or (args.step == 0 and args.doublepass) or (args.replot and args.step == 0):
         step4_double_pass(config, config_dest, project_dir, log_step4,
                           override=args.override, ref_pdb=abs_ref, replot=args.replot)
+        purge_npz(project_dir)
+
+
+def purge_npz(d):
+    """Drop Boltz's per-model pae/pde/plddt tensors once the run is analysed.
+
+    Nothing downstream reads them: ipTM comes from confidence_*.json, the
+    coordinates from the PDBs, pLDDT from their B-factor column. They are the
+    bulk of a run on disk: a benchmark compound-run measures 553 MB once they
+    are gone, against tens of gigabytes while they are there, almost all of it
+    the PAE and PDE arrays.
+
+    This used to be the scheduler's job, which meant it did not happen when
+    the scheduler was restarted under a running job, when a different
+    dispatcher drove the run, or when the scheduler died. 85 GB had piled up
+    across seven trees that way. The process that writes them removes them.
+    """
+    import glob as _glob
+    n = b = 0
+    for f in _glob.glob(f"{d}/**/*.npz", recursive=True):
+        try:
+            b += os.path.getsize(f)
+            os.remove(f)
+            n += 1
+        except OSError:
+            pass
+    if n:
+        print(f"purged {n} npz ({b >> 20} MB) from {d}")
+    return n, b
+
 
 if __name__ == "__main__":
     main()

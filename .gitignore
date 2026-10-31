@@ -1,41 +1,37 @@
-# Result directories
-Result_*/
+# Written as an allowlist: everything is ignored, and the repository's own
+# files are named back in. The ignored set is the same as the deny-list it
+# replaces; the difference is that a new file is ignored until it is named
+# here, rather than tracked until someone remembers to exclude it.
 
-# Test/scratch dirs
-test_*/
+/*
+!/.gitignore
+!/README.md
 
-# Target-specific configs and PDBs (project-specific inputs)
-project_config_*.yaml
-!project_config_vav1.yaml
-/*.pdb
-/*.cif
-# Already-tracked VAV1_af2.pdb and CRBN_pesto.pdb remain tracked;
-# gitignore only affects untracked files.
+# the pipeline
+!/run_glueplex.py
+!/run_msa_baseline.py
+!/workflow_scripts/
+!/examples/
 
-# External tool cloned per README
-tools/PeSTo/
+# PeSTo's entry point only; PeSTo itself is cloned per the README
+!/tools/
+/tools/*
+!/tools/apply_model.py
 
-# Python
+# environments and the worked example's inputs
+!/env_boltz_analysis.yml
+!/env_haddock3.yml
+!/env_pesto.yml
+!/project_config.yaml
+!/VAV1_af2.pdb
+!/CRBN_pesto.pdb
+
+!/docs/
+!/sources/
+
+# never, wherever they appear
 __pycache__/
 *.py[cod]
 *.egg-info/
-
-# OS / editor
 .DS_Store
 *.swp
-.vscode/
-.idea/
-.claude/
-
-# CRBN neosubstrate benchmark (large: structures, Boltz outputs, plots)
-crbn_benchmark/
-crbn_multipdb_medoid/
-crbn_multipdb_pesto/
-crbn_abl_nopesto/
-crbn_abl_msa/
-crbn_abl_aggaf/
-crbn_multizf/
-
-# repeat runs: raw structures for the seeded repeats, rebuilt by
-# crbn_benchmark/meta/repeat_sched.py from the per-arm indices
-crbn_repeat/
