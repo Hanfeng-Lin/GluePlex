@@ -8,15 +8,33 @@ from tqdm import tqdm
 import re
 from glob import glob
 
-# Determine the directory of the script
+# Where PeSTo itself lives. This script is ours and sits in `tools/`; PeSTo is
+# a submodule beside it, so the checkout is not dirtied by our file being in
+# it. `--pesto_root` or $PESTO_ROOT override the default for an install that
+# keeps PeSTo somewhere else.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PESTO_ROOT = os.environ.get("PESTO_ROOT") or os.path.join(SCRIPT_DIR, "PeSTo")
 
-# Add the script directory to sys.path to allow importing src
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
 
-# Add src to path if needed, though usually running from root works if src is there.
-# The notebook imports from src.dataset etc, so we assume we are running from the repo root.
+def _use_pesto(root):
+    """Make `src` importable from the PeSTo checkout at `root`."""
+    root = os.path.abspath(root)
+    if not os.path.isdir(os.path.join(root, "src")):
+        sys.exit(f"No PeSTo checkout at {root}. Clone it there, or pass "
+                 f"--pesto_root, or set PESTO_ROOT.")
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return root
+
+
+# argparse runs after the imports below, so the root is resolved from argv by
+# hand before anything from `src` is pulled in
+for _i, _a in enumerate(sys.argv):
+    if _a == "--pesto_root" and _i + 1 < len(sys.argv):
+        PESTO_ROOT = sys.argv[_i + 1]
+    elif _a.startswith("--pesto_root="):
+        PESTO_ROOT = _a.split("=", 1)[1]
+PESTO_ROOT = _use_pesto(PESTO_ROOT)
 
 from src.dataset import StructuresDataset, collate_batch_features
 from src.data_encoding import encode_structure, encode_features, extract_topology
@@ -197,6 +215,9 @@ def main():
     parser.add_argument("--output", "-o", type=str, default=".", help="Path to output directory. Defaults to current directory.")
     parser.add_argument("--model_path", "-m", type=str, default="model/save/i_v4_1_2021-09-07_11-21", help="Path to the model directory.")
     parser.add_argument("--device", "-d", type=str, default="cpu", help="Device to use (cpu or cuda).")
+    parser.add_argument("--pesto_root", type=str, default=PESTO_ROOT,
+                        help="The PeSTo checkout. Defaults to tools/PeSTo, "
+                             "or $PESTO_ROOT.")
 
     args = parser.parse_args()
 
@@ -206,9 +227,9 @@ def main():
     device = pt.device(args.device)
     
     # Check if model path exists
-    # If model path is relative, check relative to SCRIPT_DIR first
+    # a relative model path is relative to the PeSTo checkout
     if not os.path.isabs(args.model_path):
-        abs_model_path = os.path.join(SCRIPT_DIR, args.model_path)
+        abs_model_path = os.path.join(PESTO_ROOT, args.model_path)
         if os.path.exists(abs_model_path):
             args.model_path = abs_model_path
     

@@ -1,0 +1,3 @@
+[submodule "tools/PeSTo"]
+	path = tools/PeSTo
+	url = https://github.com/LBM-EPFL/PeSTo.git

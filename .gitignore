@@ -13,10 +13,11 @@
 !/workflow_scripts/
 !/examples/
 
-# PeSTo's entry point only; PeSTo itself is cloned per the README
+# our entry point, plus the PeSTo submodule's gitlink
 !/tools/
 /tools/*
 !/tools/apply_model.py
+!/tools/PeSTo
 
 # environments and the worked example's inputs
 !/env_boltz_analysis.yml

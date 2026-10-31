@@ -168,7 +168,7 @@ def step1_pesto(config, project_dir, input_dir, log_file):
         
     # Output to step1_dir
     # We need to use absolute path for apply_model.py since we might change cwd
-    script_path = os.path.abspath("tools/PeSTo/apply_model.py")
+    script_path = os.path.abspath("tools/apply_model.py")
     
     cmd = ["python", script_path] + arg + ["--output", step1_dir]
     

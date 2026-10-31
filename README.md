@@ -24,7 +24,8 @@ its commit.
 | `run_glueplex.py` | the pipeline, all four steps |
 | `run_msa_baseline.py` | the no-docking control, which skips straight to co-folding |
 | `workflow_scripts/` | the numbered scripts each step calls |
-| `tools/apply_model.py` | the PeSTo entry point; PeSTo itself is cloned, see Installation |
+| `tools/apply_model.py` | the PeSTo entry point |
+| `tools/PeSTo` | PeSTo itself, a submodule pinned at `ba651aa` |
 | `examples/` | one configuration file per arm |
 | `env_*.yml` | the three conda environments |
 | `VAV1_af2.pdb`, `CRBN_pesto.pdb` | inputs for the worked example |
@@ -138,14 +139,17 @@ The pipeline relies on three specific Conda environments being available on your
     ```
     https://www.cgl.ucsf.edu/chimerax/download.html
 
-3.  **Set up PeSTo**:
-    Since PeSTo cannot be distributed directly, you need to clone it into the `tools` directory:
+3.  **Get PeSTo**:
+    PeSTo is a submodule pinned at the commit these results were produced
+    with. Clone with it, or fetch it afterwards:
     ```bash
-    cd tools
-    git clone https://github.com/LBM-EPFL/PeSTo.git
-    cp apply_model.py PeSTo/
-    cd ..
+    git clone --recurse-submodules https://github.com/Hanfeng-Lin/GluePlex.git
+    # or, in an existing clone
+    git submodule update --init
     ```
+    The weights come with it. `tools/apply_model.py` is ours and stays in
+    `tools/`; it finds the checkout at `tools/PeSTo`, or wherever
+    `--pesto_root` or `$PESTO_ROOT` points.
 
 4.  **Create the required Conda environments**:
     
