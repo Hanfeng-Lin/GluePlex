@@ -17,23 +17,7 @@ manuscript.
 The manuscript is in preparation. Until it appears, cite this repository by
 its commit.
 
-## What is in here
-
-| path | what it is |
-|---|---|
-| `run_glueplex.py` | the pipeline, all four steps |
-| `run_msa_baseline.py` | the no-docking control, which skips straight to co-folding |
-| `workflow_scripts/` | the numbered scripts each step calls |
-| `tools/apply_model.py` | the PeSTo entry point |
-| `tools/PeSTo` | PeSTo itself, a submodule pinned at `ba651aa` |
-| `examples/` | one configuration file per arm |
-| `env_*.yml` | the three conda environments |
-| `VAV1_af2.pdb`, `CRBN_pesto.pdb` | inputs for the worked example |
-
-The CRBN benchmark, the per-model scores and the figure scripts are not in the
-repository. They accompany the manuscript as supplementary data.
-
-## The pipeline
+## The GluePlex pipeline
 
 ![The GluePlex workflow, with G3BP2 and compound A1CED as the example](docs/figure1_workflow.png)
 
@@ -82,6 +66,22 @@ The ten pass-1 structures with the highest chain-pair ipTM between CRBN and
 the target become templates for a second pass of 20 samples each, which gives
 roughly 20n + 200 structures per compound for n docked clusters. Both passes
 are then merged and re-clustered for analysis.
+
+## What is in here
+
+| path | what it is |
+|---|---|
+| `run_glueplex.py` | the pipeline, all four steps |
+| `run_msa_baseline.py` | the no-docking control, which skips straight to co-folding |
+| `workflow_scripts/` | the numbered scripts each step calls |
+| `tools/apply_model.py` | the PeSTo entry point |
+| `tools/PeSTo` | PeSTo itself, a submodule pinned at `ba651aa` |
+| `examples/` | one configuration file per arm |
+| `env_*.yml` | the three conda environments |
+| `VAV1_af2.pdb`, `CRBN_pesto.pdb` | inputs for the worked example |
+
+The CRBN benchmark, the per-model scores and the figure scripts are not in the
+repository. They accompany the manuscript as supplementary data.
 
 ## Arms
 
