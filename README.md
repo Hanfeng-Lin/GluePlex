@@ -41,7 +41,7 @@ Four steps, orchestrated by `run_glueplex.py`.
 
 ### Step 1 — PeSTo interface prediction
 
-*`tools/PeSTo/apply_model.py`*
+*`tools/apply_model.py`*
 
 Accepts `target_pdb` as a local file or a PDB ID with optional chain
 selection. PeSTo scores every residue for the probability of lying in a
@@ -52,19 +52,19 @@ protein-protein interface and the score is written into the B-factor column of
 
 Run in the `haddock3` environment, in three parts.
 
-- **`2.0 fetch_active_res.py`** derives the target's active residues when
+- **`2.0.fetch_active_res.py`** derives the target's active residues when
   `target_active_res` is unset: NACCESS for relative solvent accessibility
   (keeping residues above 15% exposed), the PeSTo B-factors (keeping CA atoms
   at or above 0.3), and the **intersection** of the two. It falls back to
   either alone if the intersection is empty.
-- **`2.1 generate_actpass.py`** builds the ambiguous restraints. CRBN uses the
+- **`2.1.generate_actpass.py`** builds the ambiguous restraints. CRBN uses the
   fixed actives `105,332,341`; the target uses the residues from 2.0. Passive
   residues come from `haddock3-restraints passive_from_active`.
-- **`2.2 run_haddock_workflow.py`** normalises chain IDs (CRBN to A, target to
+- **`2.2.run_haddock_workflow.py`** normalises chain IDs (CRBN to A, target to
   B) and runs `topoaa` → `rigidbody` (sampling 1000) → `seletop` (200) →
   `flexref` → `mdref` → `clustfcc` → `seletopclusts` (4 models per cluster),
   with `caprieval` after each refinement.
-- **`2.3 export_mmcif.py`** converts the top model of every cluster to mmCIF
+- **`2.3.export_mmcif.py`** converts the top model of every cluster to mmCIF
   with ChimeraX so Boltz-2 can template on it.
 
 The glue is absent throughout Step 2 by design: the docking supplies physical
@@ -180,6 +180,8 @@ example file is this with the irrelevant parts removed.
 ```yaml
 # General Settings
 base_dir: "/path/to/GluePlex"
+# project_name: "Result_my_run"  # the output directory. Unset, it is built
+                                 # from the two protein names and the ligand.
 
 # Step 1: PeSTo
 target_pdb: "./VAV1_af2.pdb"  # Path to target PDB or PDB ID (auto parsing e.g., 1E9H_A)
@@ -189,7 +191,7 @@ target_pdb: "./VAV1_af2.pdb"  # Path to target PDB or PDB ID (auto parsing e.g.,
 # Unset = single-structure behaviour, i.e. the `af` arm.
 # pesto_extra_pdbs:
 #   - "./structures/TARGET_1abc_A.pdb"
-# pesto_aggregate: union        # union | consensus | mean | best — keep at union
+# pesto_aggregate: union        # union | consensus | mean | best
 # pesto_threshold: 0.3          # a residue is active at or above this score
 
 # Optional. Skip PeSTo and write target_pdb out with zeroed B-factors, so
@@ -201,8 +203,11 @@ target_pdb: "./VAV1_af2.pdb"  # Path to target PDB or PDB ID (auto parsing e.g.,
 # Active residues for Target. If empty, they will be fetched automatically
 # through PeSTo score and SASA filtering.
 # target_active_res: "1,3,9,10,..."
+# crbn_active_res: "105,332,341"  # the fixed partner's actives; this is the default
 haddock_run_dir: "haddock_results"
 haddock_ncores: 80
+# haddock_mode: mpi               # mpi | local
+# haddock_seed: 917               # CNS iniseed. haddock3 defaults to 917.
 
 # Step 3: Boltz2 (Pass 1)
 step3:
