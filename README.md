@@ -122,12 +122,14 @@ The pipeline relies on three specific Conda environments being available on your
 
 ## Installation
 
-1.  **Clone the repository**:
+1.  **Clone the repository**, then fetch PeSTo:
     ```bash
     git clone https://github.com/Hanfeng-Lin/GluePlex.git
     cd GluePlex
-    git checkout GluePlex_doublepass
+    git submodule update --init
     ```
+    PeSTo is a submodule pinned at the commit these results were produced
+    with. The weights come with it, about 1.3 GB.
 
 2.  **Install NACCESS and UCSF ChimeraX**:
     Ensure `naccess` is installed and available in your PATH. This is required for calculating surface accessibility in Step 2.
@@ -139,17 +141,10 @@ The pipeline relies on three specific Conda environments being available on your
     ```
     https://www.cgl.ucsf.edu/chimerax/download.html
 
-3.  **Get PeSTo**:
-    PeSTo is a submodule pinned at the commit these results were produced
-    with. Clone with it, or fetch it afterwards:
-    ```bash
-    git clone --recurse-submodules https://github.com/Hanfeng-Lin/GluePlex.git
-    # or, in an existing clone
-    git submodule update --init
-    ```
-    The weights come with it. `tools/apply_model.py` is ours and stays in
-    `tools/`; it finds the checkout at `tools/PeSTo`, or wherever
-    `--pesto_root` or `$PESTO_ROOT` points.
+3.  **PeSTo's entry point**:
+    `tools/apply_model.py` is ours and stays in `tools/`. It finds the
+    checkout at `tools/PeSTo`, or wherever `--pesto_root` or `$PESTO_ROOT`
+    points.
 
 4.  **Create the required Conda environments**:
     
