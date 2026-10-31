@@ -157,7 +157,6 @@ def step1_pesto(config, project_dir, input_dir, log_file):
             shutil.copy(target_pdb, dest_pdb)
             print(f"Copied input PDB to {dest_pdb}")
         
-        # Use the copied file for processing
         arg = ["--pdb_file", dest_pdb]
         base = os.path.splitext(os.path.basename(dest_pdb))[0]
     else:
@@ -166,10 +165,8 @@ def step1_pesto(config, project_dir, input_dir, log_file):
         arg = ["--pdb_id", target_pdb]
         base = target_pdb
         
-    # Output to step1_dir
-    # We need to use absolute path for apply_model.py since we might change cwd
     script_path = os.path.abspath("tools/apply_model.py")
-    
+
     cmd = ["python", script_path] + arg + ["--output", step1_dir]
     
     # Run in input_dir so fetched PDBs land there
@@ -528,7 +525,11 @@ def main():
     else:
         project_name = config.get('project_name', 'GluePlex_Project')
     base_dir = config.get('base_dir', os.getcwd())
-    project_dir = os.path.join(base_dir, project_name)
+    # Absolute from here down. Each step runs its scripts with cwd set to that
+    # step's own directory, so a project_dir of "." leaves every derived path
+    # to be resolved a second time against the wrong place. The shipped
+    # example configs all use ".".
+    project_dir = os.path.abspath(os.path.join(base_dir, project_name))
     
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
