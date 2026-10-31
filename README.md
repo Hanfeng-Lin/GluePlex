@@ -93,35 +93,18 @@ it skips docking entirely.
 |---|---|---|---|
 | `af` | an AlphaFold model | PeSTo on that model | `examples/arm_af.yaml` |
 | `aggaf` | an AlphaFold model | PeSTo unioned over every structure supplied | `examples/arm_aggaf.yaml` |
-| `medoid` | the most central experimental chain | the same union | `examples/arm_medoid.yaml` |
-| `pesto` | the experimental chain PeSTo scores highest | **that chain's own actives, not a union** | `examples/arm_pesto.yaml` |
+| `medoid` | the most central experimental chain | PeSTo unioned over every structure supplied | `examples/arm_medoid.yaml` |
+| `pesto` | the experimental chain PeSTo scores highest | PeSTo on that chain | `examples/arm_pesto.yaml` |
 | `nopesto` | an AlphaFold model | none, so HADDOCK falls back to SASA | `examples/arm_nopesto.yaml` |
 | `msa` | nothing, no docking at all | — | `examples/arm_msa.yaml` |
 
-`af` is the default arm and the one the manuscript reports.
+`af` is the default arm and the one the manuscript reports. `msa` runs through
+`run_msa_baseline.py`: Boltz-2 with a server MSA, no template and no
+restraints, sampling at or above the pipeline's own budget.
 
-The `pesto` arm deliberately does not take the union. It picks its chain
-*because* that chain's PeSTo signal is the strongest among the gene's
-structures, and handing it a union prior would discard the quantity the
-selection rule is built on, leaving the rule setting nothing but the
-conformer. The flag lives in `UNION_ARMS = {"aggaf", "medoid"}` in
-`crbn_benchmark/meta/repeat_arms_index.py`. One consequence is that `medoid`
-and `pesto` differ in both the docked chain and the prior, so they are two
-recipes rather than a one-variable contrast.
-
-`msa` runs through `run_msa_baseline.py`: Boltz-2 with a server MSA, no
-template and no restraints, sampling at or above the pipeline's own budget and
-read out identically.
-
-### Keeping arms comparable
-
-`pesto_aggregate` must stay at `union` in the two arms that aggregate, `aggaf`
-and `medoid`. It is the constant that makes them differ only in which
-structure is docked; changing it introduces a second variable and the two can
-no longer be read against each other. The other merge strategies the
-aggregator accepts (`consensus`, `mean`, `best`) are there for a separate
-experiment, not for mixing into this comparison. The `pesto` arm does not
-aggregate at all, for the reason given above.
+`pesto_aggregate` selects the merge strategy for the two arms that aggregate.
+It is `union` here; the aggregator also accepts `consensus`, `mean` and
+`best`.
 
 Run each arm into its own `project_name`, or the later one will reuse the
 earlier one's step directories.
